@@ -322,6 +322,24 @@ git worktree remove ../v0.1
 
 ![감압 복도: 깨진 창문, 천장의 드로퍼, 끝의 기어 나가는 칸막이](images/enemies/stage2-corridor.png)
 
+### 10/20 (화) — 출구 그림과 발사 연출 (`feat/exit-door-ship`)
+- 출구 깃발(강의 예제 그림)을 교체: 1·2스테이지 = **엘리베이터**(다음 구역으로 이동), 3스테이지 = **탈출 우주선**. 둘 다 ansimuz 팩(CC0, 이미 보유)이라 주인공·외계인과 그림체가 같음. 후보로 OpenGameArt 열림 문(CC0), BeeMaxStudio 로켓 팩(CC0)도 검토
+- **발사 연출** (`GameState.LAUNCH`): 우주선에 닿으면 탑승(플레이어 숨김) → 엔진 불꽃 애니메이션 + 덧그린 불꽃, 오른쪽 위로 등가속 상승(x = 60t + 140t², y = 250t²), 카메라가 우주선을 따라가며 진동, "발사!" 표시 → 3초 뒤 탈출 성공 화면
+  - 원본 불꽃 프레임의 불꽃이 작아 사각형 3겹으로 덧그림. 처음엔 그림 왼쪽 여백 때문에 불꽃이 엔진과 떨어져 보여 위치를 맞춤
+- 강의 예제 깃발 그림과 흰 실루엣 변환 코드 제거 → **강의 예제 에셋은 이제 하나도 안 씀**
+
+| 엘리베이터 출구 | 탈출 우주선 | 발사 |
+|---|---|---|
+| ![](images/exit/exit-elevator.png) | ![](images/exit/escape-ship.png) | ![](images/exit/launch-2.png) |
+
+### 10/20 (화) — 테스트 키 F1, 플레이테스트 배포 (`feat/f1-playtest-release`)
+- **F1**: 다음 스테이지로 바로 이동 (3스테이지에서 누르면 1스테이지). 검증·시연용. 기존 N(지금 스테이지 클리어)은 제거
+- 친구 배포 파이프라인 (`.github/workflows/playtest-release.yml`)
+  - `v*` 태그 push → 검증 코드 4개 → jar + 자바 포함 실행 파일(윈도우·맥 M/인텔·리눅스, construo) 빌드 → GitHub Release(미리 보기)에 첨부
+  - Release 본문 = `.github/PLAYTEST_RELEASE.md` (다운로드·실행·조작·피드백 방법)
+  - 피드백: Issues의 "플레이테스트 피드백" 양식 (`.github/ISSUE_TEMPLATE/playtest.md`)
+- jar 이름 `MidtermGame` → `MoonBaseEscape`, 창 제목 "Moon Base Escape - 달 기지 탈출"
+
 ---
 
 ## 7. 남은 일 / 알려진 문제
@@ -340,4 +358,5 @@ git worktree remove ../v0.1
 - [x] 총알이 얇은 발판(24px)을 뚫던 문제 → 이동을 8px 단위로 나눠 검사
 - [ ] 배경 픽셀 배율(3~6배)이 캐릭터·지형(2배)보다 커서 배경 픽셀이 더 굵어 보임 (거리감으로 수용 중)
 - [x] 3스테이지에도 1스테이지 맵의 천장이 보이던 문제 → 스테이지 분리로 해결
-- [ ] 깃발 → 탈출포드 그림 교체 (Lunar 팩 Spaceships.png 후보)
+- [x] 깃발 → 엘리베이터·탈출 우주선 그림 교체, 발사 연출
+- [ ] 맥 앱은 서명이 없어 우클릭 → 열기 필요, 윈도우는 SmartScreen 경고 (배포 안내문에 적음)

@@ -101,7 +101,9 @@ public class Art {
     public final ObjectSet<Animation<TextureRegion>> facesLeft = new ObjectSet<>();
     /** 0: 연구동, 1: 붕괴 구역, 2: 달 표면 */
     public final Look[] looks;
-    public final Texture flag;
+    /** 출구 그림 */
+    public final Texture elevator;
+    public final Animation<TextureRegion> ship, shipThrust;
 
     private final Array<Texture> textures = new Array<>();
 
@@ -164,7 +166,10 @@ public class Art {
                 new Layer(load("backgrounds/lunar/Surface_Layer4.png"), 3, 0.50f, 0, Color.WHITE)),  // 가까운 지면
         };
 
-        flag = whiteSilhouette("flag.png");
+        // 출구: 1·2스테이지 = 다음 구역으로 가는 엘리베이터, 3스테이지 = 탈출 우주선 (ansimuz)
+        elevator = load("sprites/props/elevator.png");
+        ship = strip("sprites/props/ship.png", 106, 0.12f, Animation.PlayMode.LOOP);              // 대기: 살짝 흔들림
+        shipThrust = strip("sprites/props/ship-thrust.png", 106, 0.05f, Animation.PlayMode.LOOP); // 발사: 엔진 불꽃
     }
 
     private Texture load(String path) {
@@ -238,22 +243,6 @@ public class Art {
         Array<TextureRegion> frames = new Array<>();
         for (int x = 0; x < t.getWidth(); x += frameWidth) frames.add(new TextureRegion(t, x, 0, frameWidth, t.getHeight()));
         return new Animation<>(frameTime, frames, mode);
-    }
-
-    /** 검은 아이콘을 흰색 실루엣으로 바꿔 불러온다. 흰색이어야 batch.setColor로 원하는 색을 입힐 수 있다. */
-    private Texture whiteSilhouette(String path) {
-        Pixmap pm = new Pixmap(Gdx.files.internal(path));
-        pm.setBlending(Pixmap.Blending.None); // 섞지 않고 픽셀을 그대로 덮어쓴다
-        for (int y = 0; y < pm.getHeight(); y++) {
-            for (int x = 0; x < pm.getWidth(); x++) {
-                int alpha = pm.getPixel(x, y) & 0xff; // RGBA8888의 마지막 바이트가 알파
-                pm.drawPixel(x, y, 0xffffff00 | alpha);
-            }
-        }
-        Texture t = new Texture(pm);
-        pm.dispose();
-        textures.add(t);
-        return t;
     }
 
     public void dispose() {

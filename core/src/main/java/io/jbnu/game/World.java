@@ -187,7 +187,6 @@ public class World {
         facingRight = aimX >= player.bounds.x + player.bounds.width / 2; // 조준점이 몸 앞쪽이면 그쪽을 본다
 
         handleWeaponKeys();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.N)) cleared = true; // 테스트용: 이 스테이지를 바로 클리어
 
         // 1. 앉기 / 좌우 이동 / 점프 (강의: 키를 누르는 동안 속도를 매 프레임 다시 정한다)
         setCrouching(Gdx.input.isKeyPressed(Input.Keys.S) && player.grounded);

@@ -13,7 +13,16 @@
 ./gradlew lwjgl3:run
 ```
 
-- jar 빌드: `./gradlew lwjgl3:jar` → `lwjgl3/build/libs/MidtermGame-1.0.0.jar`
+- jar 빌드: `./gradlew lwjgl3:jar` → `lwjgl3/build/libs/MoonBaseEscape-1.0.0.jar`
+
+## 플레이테스트 배포
+
+- `v*` 태그 push → GitHub Actions가 검사·빌드 후 Release(미리 보기)에 윈도우·맥·리눅스 실행 파일 첨부
+- 피드백: Issues → "플레이테스트 피드백" 양식
+
+```bash
+git tag v0.5-playtest && git push origin v0.5-playtest
+```
 
 ## 조작
 
@@ -28,7 +37,7 @@
 | ESC | 일시정지 (조작표 표시) |
 | Enter | 지금 스테이지 재시작 / 클리어 화면에서 다음 스테이지 |
 | F12 | 스크린샷 (`screenshots/`) |
-| N | 지금 스테이지 바로 클리어 (테스트용) |
+| F1 | 다음 스테이지로 건너뛰기 (테스트용, 맥은 fn+F1) |
 
 시작 화면에서 아무 키나 누르면 시작.
 
@@ -38,7 +47,7 @@
 |---|---|---|---|---|
 | 1 | 연구동 | 1.0G | 119 / 188 | 튜토리얼, 샷건 벽, 창문 3개, 갈림길 |
 | 2 | 붕괴 구역 | 0.58G | 165 / 288 | 처음부터 깨진 감압 복도(끝은 앉아서 기어 통과), 넓은 구덩이, 수직 통로 |
-| 3 | 달 표면 | 0.16G | 257 / 712 | 전체 진공, 고원·메사를 샷건 반동으로 오름, 탈출포드 |
+| 3 | 달 표면 | 0.16G | 257 / 712 | 전체 진공, 고원·메사를 샷건 반동으로 오름, 탈출 우주선 발사 |
 
 ## 핵심 요소
 
@@ -100,11 +109,10 @@ java -ea -cp "core/build/classes/java/main:core/build/classes/java/test:$(find ~
 
 | 경로 | 출처 |
 |---|---|
-| `assets/sprites/` (marine, alien, alien-flying) | [Sideview Sci-Fi Patreon Collection](https://opengameart.org/content/sideview-sci-fi-patreon-collection) — ansimuz |
+| `assets/sprites/` (marine, alien, alien-flying, props: 엘리베이터·우주선) | [Sideview Sci-Fi Patreon Collection](https://opengameart.org/content/sideview-sci-fi-patreon-collection) — ansimuz |
 | `assets/backgrounds/ansimuz/` | 위와 동일 |
 | `assets/tiles/foozle_lab_tileset.png` | [Sci-fi Lab Tileset](https://foozlecc.itch.io/sci-fi-lab-tileset-decor-traps) — Foozle |
 | `assets/backgrounds/lunar/`, `assets/tiles/lunar_tilesheet.png` | [Lunar Battle Pack](https://mattwalkden.itch.io/lunar-battle-pack) — Matt Walkden |
-| `assets/flag.png` | 강의 예제 Project2 (교체 예정) |
 | `assets/fonts/Galmuri11.ttf` | [갈무리](https://github.com/quiple/galmuri) — 이민서(quiple), **SIL OFL 1.1** (라이선스: `assets/fonts/Galmuri-OFL.md`) |
 
 - 원본: `art-source/` (게임에서 미사용)

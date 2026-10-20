@@ -30,7 +30,11 @@ public class Main extends ApplicationAdapter {
 
     /** 강의 10장의 GameState를 일시정지까지 확장. */
     /** 강의 10장 GameState를 확장: 일시정지, 스테이지 클리어(다음 스테이지 대기), 전체 클리어 */
-    private enum GameState { TITLE, PLAYING, PAUSED, STAGE_CLEAR, ALL_CLEAR }
+    private enum GameState { TITLE, PLAYING, PAUSED, STAGE_CLEAR, LAUNCH, ALL_CLEAR }
+
+    /** 발사 연출: 길이(초)와 경과 시간, 우주선 출발 위치 */
+    private static final float LAUNCH_TIME = 3f;
+    private float launchTime, shipStartX, shipStartY;
 
     /** 스테이지 시작 배너를 보여 줄 남은 시간 */
     private float bannerTimer;
@@ -163,7 +167,21 @@ public class Main extends ApplicationAdapter {
         {"stage3-spitters-2", (Runnable) () -> { }},
         {"stage3-spitters-2b", (Runnable) () -> { }},
         {"stage3-spitters-2c", (Runnable) () -> { }},
-        {"stage3-spitters-3", (Runnable) () -> {
+        {"stage3-spitters-3", (Runnable) () -> {   // 1스테이지 출구 엘리베이터 앞
+            startStage(0);
+            bannerTimer = 0;
+            world.player.bounds.setPosition(4300, 64);
+            snapCamera();
+        }},
+        {"exit-elevator", (Runnable) () -> {     // 3스테이지 탈출 우주선 앞 → 다음 장면에서 탑승
+            startStage(2);
+            bannerTimer = 0;
+            world.player.bounds.setPosition(4320, 1164);
+            snapCamera();
+        }},
+        {"escape-ship", (Runnable) () -> world.player.bounds.setPosition(4420, 1164)},
+        {"launch-1", (Runnable) () -> { }},
+        {"launch-2", (Runnable) () -> {
             startStage(1);
             currentState = GameState.STAGE_CLEAR;
         }},
@@ -218,6 +236,10 @@ public class Main extends ApplicationAdapter {
             }
             return;
         }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) { // 테스트용: 바로 다음 스테이지 (마지막이면 1스테이지로)
+            startStage((world.stageIndex + 1) % Stage.COUNT);
+            return;
+        }
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             if (currentState == GameState.PLAYING) currentState = GameState.PAUSED;
             else if (currentState == GameState.PAUSED) currentState = GameState.PLAYING;
@@ -270,7 +292,15 @@ public class Main extends ApplicationAdapter {
             if (world.windowBrokeThisStep) camManager.startShake(0.8f, 18f);
             endingCheck();
         }
-        if (!overview) camManager.update(camera, playerCenterX(), playerCenterY(), world.stage.width, world.stage.height, dt);
+        if (currentState == GameState.LAUNCH) {
+            launchTime += dt;
+            camManager.startShake(0.1f, 6f * Math.min(1f, launchTime)); // 엔진 진동
+            camManager.update(camera, shipX() + world.flag.width / 2, shipY() + world.flag.height / 2,
+                world.stage.width, world.stage.height, dt);
+            if (launchTime >= LAUNCH_TIME) currentState = GameState.ALL_CLEAR;
+        } else if (!overview) {
+            camManager.update(camera, playerCenterX(), playerCenterY(), world.stage.width, world.stage.height, dt);
+        }
         updatePlayerAnim(dt);
         elapsed += dt;
     }
@@ -294,9 +324,25 @@ public class Main extends ApplicationAdapter {
     /** 강의 10장 endingCheck: 출구에 닿은 순간 한 번만 상태를 바꾸고 연출을 시작한다. 마지막 스테이지면 전체 클리어. */
     private void endingCheck() {
         if (world.isGameClear() && currentState == GameState.PLAYING) {
-            currentState = world.isLastStage() ? GameState.ALL_CLEAR : GameState.STAGE_CLEAR;
-            camManager.startShake(1.0f, 20f);
+            if (world.isLastStage()) { // 탈출 우주선에 탑승 → 발사 연출 뒤 전체 클리어
+                currentState = GameState.LAUNCH;
+                launchTime = 0;
+                shipStartX = world.flag.x;
+                shipStartY = world.flag.y;
+            } else {
+                currentState = GameState.STAGE_CLEAR;
+                camManager.startShake(1.0f, 20f);
+            }
         }
+    }
+
+    /** 발사 중 우주선 위치: 오른쪽 위로 점점 빨라진다 (등가속도) */
+    private float shipX() {
+        return shipStartX + 60 * launchTime + 140 * launchTime * launchTime;
+    }
+
+    private float shipY() {
+        return shipStartY + 250 * launchTime * launchTime;
     }
 
     private float playerCenterX() {
@@ -327,12 +373,20 @@ public class Main extends ApplicationAdapter {
         for (Rectangle block : world.blocks) drawBlock(look.terrain, block);
         for (Rectangle st : world.stations) drawStation(st);
         Rectangle f = world.flag;
-        batch.setColor(Color.LIME); // 원본이 검은색이라 어두운 배경에서 보이도록 밝게 칠한다
-        batch.draw(art.flag, f.x, f.y, f.width, f.height);
-        font.setColor(Color.LIME);
-        font.draw(batch, world.isLastStage() ? "탈출포드" : "출구", f.x - 8, f.y + f.height + 28);
-        font.setColor(Color.WHITE);
-        batch.setColor(Color.WHITE);
+        boolean boarded = currentState == GameState.LAUNCH || currentState == GameState.ALL_CLEAR;
+        if (!world.isLastStage()) {
+            batch.draw(art.elevator, f.x, f.y, f.width, f.height); // 다음 구역으로 가는 엘리베이터
+        } else if (currentState == GameState.LAUNCH) {
+            drawExhaust(shipX() + 70, shipY() + f.height * 0.25f); // 그림 왼쪽 여백을 건너 엔진 뒤에 붙인다
+            batch.draw(art.shipThrust.getKeyFrame(launchTime), shipX(), shipY(), f.width, f.height); // 엔진 불꽃을 뿜으며 상승
+        } else if (!boarded) {
+            batch.draw(art.ship.getKeyFrame(elapsed), f.x, f.y, f.width, f.height);
+        }
+        if (!boarded) {
+            font.setColor(Color.LIME);
+            drawLabel(world.isLastStage() ? "탈출포드" : "출구", f.x + f.width / 2, f.y + f.height + 30);
+            font.setColor(Color.WHITE);
+        }
 
         for (Enemy e : world.enemies) {
             Animation<TextureRegion> a = e.type == Enemy.Type.SPITTER ? art.alienFly : e.charging ? art.alienWalk : art.alienIdle;
@@ -346,8 +400,10 @@ public class Main extends ApplicationAdapter {
         // 플레이어: 맞은 뒤 무적 시간에는 깜빡인다
         boolean blink = world.invulnerable > 0 && ((int) (world.invulnerable * 10)) % 2 == 0;
         batch.setColor(1, 1, 1, blink ? 0.3f : 1f);
-        drawActor(playerAnim, animTime, world.player.bounds, world.facingRight, world.crouching ? 0.75f : 1f);
-        if (!world.playerDead()) drawArmAndGun(blink ? 0.3f : 1f);
+        if (!boarded) { // 우주선에 탄 뒤에는 플레이어를 그리지 않는다
+            drawActor(playerAnim, animTime, world.player.bounds, world.facingRight, world.crouching ? 0.75f : 1f);
+            if (!world.playerDead()) drawArmAndGun(blink ? 0.3f : 1f);
+        }
         batch.setColor(Color.WHITE);
 
         for (World.Acid ac : world.acids) { // 산성탄: 연두색 덩어리 + 밝은 속
@@ -536,6 +592,9 @@ public class Main extends ApplicationAdapter {
             drawCentered(String.format("다음: %s  (중력 %.2fG)", next.name, next.gravityScale), VIEW_H / 2 - 30, 1.5f, Color.WHITE);
             drawCentered("Enter를 누르세요", VIEW_H / 2 - 90, 1f, Color.LIGHT_GRAY);
         }
+        if (currentState == GameState.LAUNCH && launchTime > 0.4f) {
+            drawCentered("발사!", VIEW_H - 150, 3f, new Color(1f, 0.8f, 0.3f, Math.min(1f, (launchTime - 0.4f) * 2)));
+        }
         if (currentState == GameState.ALL_CLEAR) {
             drawPanel();
             drawCentered("탈출 성공", VIEW_H / 2 + 140, 3.5f, Color.LIME);
@@ -600,6 +659,28 @@ public class Main extends ApplicationAdapter {
     }
 
     private final GlyphLayout layout = new GlyphLayout();
+
+    /**
+     * 발사 중 엔진 불꽃: 우주선 뒤쪽(왼쪽 아래 엔진)에서 뒤로 뻗는 겹친 사각형.
+     * 매 프레임 길이가 흔들리고, 시간이 지날수록 길어진다 (원본 그림의 불꽃이 작아서 덧그린다).
+     */
+    private void drawExhaust(float rearX, float y) {
+        float grow = Math.min(1f, launchTime * 1.5f);
+        float len = (60 + MathUtils.random(-12f, 12f)) * (0.5f + grow);
+        batch.setColor(1f, 0.45f, 0.1f, 0.85f);
+        batch.draw(pixel, rearX - len, y - 14, len, 28);
+        batch.setColor(1f, 0.8f, 0.3f, 0.95f);
+        batch.draw(pixel, rearX - len * 0.6f, y - 8, len * 0.6f, 16);
+        batch.setColor(1f, 1f, 0.85f, 1f);
+        batch.draw(pixel, rearX - len * 0.25f, y - 4, len * 0.25f, 8);
+        batch.setColor(Color.WHITE);
+    }
+
+    /** 월드 좌표의 가운데 정렬 글자 (출구 이름표) */
+    private void drawLabel(String text, float centerX, float y) {
+        layout.setText(font, text);
+        font.draw(batch, layout, centerX - layout.width / 2, y);
+    }
 
     private float widthOf(String text) {
         layout.setText(font, text);

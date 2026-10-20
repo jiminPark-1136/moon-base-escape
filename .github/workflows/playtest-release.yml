@@ -1,0 +1,57 @@
+# 플레이테스트 배포: v로 시작하는 태그를 올리면 검사 → 빌드 → GitHub Release(미리 보기)에 실행 파일을 올린다.
+#   git tag v0.5-playtest && git push origin v0.5-playtest
+# Actions 탭에서 수동 실행(workflow_dispatch)하면 Release 없이 빌드 결과만 Artifacts로 받을 수 있다.
+name: playtest-release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: 검증 코드 4개 실행
+        run: |
+          ./gradlew core:testClasses
+          GDX=$(find ~/.gradle/caches/modules-2 -name 'gdx-1.13.1.jar' | head -1)
+          CP="core/build/classes/java/main:core/build/classes/java/test:$GDX"
+          for c in RecoilHeightCheck EnemyCheck OxygenWindowCheck StageCheck; do
+            java -ea -cp "$CP" io.jbnu.game.$c
+          done
+
+      - name: 빌드 (jar + 자바 포함 실행 파일 윈도우·맥·리눅스)
+        run: ./gradlew lwjgl3:jar lwjgl3:packageWinX64 lwjgl3:packageMacM1 lwjgl3:packageMacX64 lwjgl3:packageLinuxX64
+
+      - name: 결과물 목록
+        run: find lwjgl3/build -maxdepth 4 \( -name '*.zip' -o -name '*.jar' \) | sort
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: playtest-builds
+          path: |
+            lwjgl3/build/libs/MoonBaseEscape-*.jar
+            lwjgl3/build/construo/dist/*.zip
+
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          prerelease: true
+          body_path: .github/PLAYTEST_RELEASE.md
+          fail_on_unmatched_files: true
+          files: |
+            lwjgl3/build/libs/MoonBaseEscape-*.jar
+            lwjgl3/build/construo/dist/*.zip
