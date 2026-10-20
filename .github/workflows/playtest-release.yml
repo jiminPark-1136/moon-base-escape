@@ -36,6 +36,16 @@ jobs:
       - name: 빌드 (jar + 자바 포함 실행 파일 윈도우·맥·리눅스)
         run: ./gradlew lwjgl3:jar lwjgl3:packageWinX64 lwjgl3:packageMacM1 lwjgl3:packageMacX64 lwjgl3:packageLinuxX64
 
+      # construo zip은 실행 권한을 비표준으로 적어서 맥 기본 압축 해제(Safari·Finder)가 권한을 버린다
+      # → 앱이 "열 수 없습니다"로 실패. 표준 zip으로 다시 묶어 실행 권한을 살린다.
+      - name: zip 다시 묶기 (실행 권한 보존)
+        run: |
+          cd lwjgl3/build/construo/dist
+          for z in *.zip; do
+            rm -rf tmp && mkdir tmp && unzip -q "$z" -d tmp && rm "$z"
+            (cd tmp && zip -qry "../$z" .) && rm -rf tmp
+          done
+
       - name: 결과물 목록
         run: find lwjgl3/build -maxdepth 4 \( -name '*.zip' -o -name '*.jar' \) | sort
 
