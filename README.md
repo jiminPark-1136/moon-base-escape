@@ -117,6 +117,8 @@ java -ea -cp "core/build/classes/java/main:core/build/classes/java/test:$(find ~
 
 ## 에셋 (글꼴 외 전부 CC0)
 
+코드는 [MIT](LICENSE)이고, 아래 에셋은 각자의 라이선스를 따릅니다.
+
 | 경로 | 출처 |
 |---|---|
 | `assets/sprites/` (marine, alien, alien-flying, props: 엘리베이터·우주선) | [Sideview Sci-Fi Patreon Collection](https://opengameart.org/content/sideview-sci-fi-patreon-collection) — ansimuz |
