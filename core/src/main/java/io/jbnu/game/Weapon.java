@@ -5,9 +5,9 @@ package io.jbnu.game;
  * 같은 반동이라도 도달 높이는 v² / 2g 이므로 중력이 약할수록 저절로 높이 뜬다.
  */
 public enum Weapon {
-    //        이름       데미지 펠릿 퍼짐(°) 반동  연사(초) 탄창 재장전(초)
-    PISTOL("Pistol",   1,    1,   2f,    80f, 0.20f, 12,  1.0f),
-    SHOTGUN("Shotgun", 1,    5,  15f,   500f, 0.80f,  4,  1.5f);
+    //        이름       데미지 펠릿 퍼짐(°) 반동  연사(초) 탄창 재장전(초) 어깨~총구(월드 단위, Art의 팔 조각 길이 × 2)
+    PISTOL("Pistol",   1,    1,   2f,    80f, 0.20f, 12,  1.0f,      36f),
+    SHOTGUN("Shotgun", 1,    5,  15f,   500f, 0.80f,  4,  1.5f,      48f);
 
     public final String label;
     public final int damage;
@@ -17,9 +17,11 @@ public enum Weapon {
     public final float cooldown;
     public final int magazine;
     public final float reloadTime;
+    public final float barrel;
 
     Weapon(String label, int damage, int pellets, float spreadDeg, float recoil,
-           float cooldown, int magazine, float reloadTime) {
+           float cooldown, int magazine, float reloadTime, float barrel) {
+        this.barrel = barrel;
         this.label = label;
         this.damage = damage;
         this.pellets = pellets;

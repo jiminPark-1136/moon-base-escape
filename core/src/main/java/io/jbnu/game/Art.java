@@ -8,6 +8,8 @@ import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
 import com.badlogic.gdx.utils.ObjectIntMap;
+import com.badlogic.gdx.utils.ObjectMap;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.ObjectSet;
 
 /**
@@ -69,8 +71,24 @@ public class Art {
     private static final String MARINE = "sprites/marine/";
     private static final String ALIEN = "sprites/alien/";
 
-    /** 플레이어 (ansimuz 스페이스 마린: 소총을 든 채로 움직인다) */
-    public final Animation<TextureRegion> idle, run, jump, shoot, die;
+    /** 플레이어 몸 (ansimuz 스페이스 마린에서 팔뚝·손·총을 지운 것). 팔+총은 따로 돌려 그린다. */
+    public final Animation<TextureRegion> idle, run, jump, die;
+    /** 팔+총 조각 (대기 프레임에서 오려 냄). 샷건 = 소총 전체, 권총 = 총신을 짧게 자른 것 */
+    public final TextureRegion shotgunArm, pistolArm;
+    /** 팔 조각 안의 회전축(어깨): 조각 왼쪽·아래에서 픽셀 */
+    public static final float ARM_PIVOT_X = 1f, ARM_PIVOT_Y = 8.5f;
+    /** 몸 프레임마다 어깨 위치 {프레임 왼쪽에서 x, 프레임 아래에서 y} (픽셀) */
+    public final ObjectMap<TextureRegion, Vector2> shoulder = new ObjectMap<>();
+
+    // 대기 프레임 0 기준 좌표 (픽셀, 위에서 아래로). 헬멧 왼쪽 위 픽셀로 프레임마다 위치를 맞춘다.
+    private static final int HELMET_X = 11, HELMET_Y = 12;
+    // 팔은 어깨(x 9)에서 시작해 손(x 18~21)과 총(~x 33)까지 이어진다. 이 띠를 몸에서 떼어 낸다.
+    private static final int ARM_LEFT = 8, ARM_TOP = 20, ARM_BOTTOM = 29;
+    /** 이 x까지는 팔 뒤에 몸통이 있으므로 지우지 않고 몸통 색으로 메운다 (20행은 옷깃이라 그대로 둔다) */
+    private static final int TORSO_RIGHT = 17, FILL_TOP = 21;
+    private static final int TORSO_FILL = 0x9b3813ff; // 몸통 주황(그늘)
+    private static final int RIFLE_END = 33, PISTOL_END = 27;           // 총구 x
+    private static final float SHOULDER_X = 9, SHOULDER_Y = 21.5f;
     /** 크롤러 (ansimuz 걷는 외계인) */
     public final Animation<TextureRegion> alienWalk, alienIdle;
     /** 애니메이션별 몸 중심의 x (프레임 왼쪽에서 픽셀). 프레임 너비가 달라도 몸이 같은 자리에 그려지게 한다. */
@@ -85,17 +103,19 @@ public class Art {
 
     public Art() {
         //                    파일                               프레임 너비, 프레임 시간(초), 반복
-        idle      = strip(MARINE + "space-marine-idle.png",   48, 0.15f, Animation.PlayMode.LOOP);
-        run       = strip(MARINE + "space-marine-run.png",    48, 0.07f, Animation.PlayMode.LOOP);
-        jump      = strip(MARINE + "space-marine-jump.png",   36, 0.08f, Animation.PlayMode.NORMAL);
-        shoot     = strip(MARINE + "space-marine-shoot.png",  64, 0.06f, Animation.PlayMode.NORMAL);
+        idle      = armlessStrip(MARINE + "space-marine-idle.png", 48, 0.15f, Animation.PlayMode.LOOP);
+        run       = armlessStrip(MARINE + "space-marine-run.png",  48, 0.07f, Animation.PlayMode.LOOP);
+        jump      = armlessStrip(MARINE + "space-marine-jump.png", 36, 0.08f, Animation.PlayMode.NORMAL);
         die       = strip(MARINE + "space-marine-die.png",    80, 0.15f, Animation.PlayMode.NORMAL);
+        Pixmap marine = new Pixmap(Gdx.files.internal(MARINE + "space-marine-idle.png"));
+        shotgunArm = cutArm(marine, RIFLE_END);
+        pistolArm = cutArm(marine, PISTOL_END);
+        marine.dispose();
         alienWalk = strip(ALIEN + "alien-enemy-walk.png",     57, 0.10f, Animation.PlayMode.LOOP);
         alienIdle = strip(ALIEN + "alien-enemy-idle.png",     48, 0.15f, Animation.PlayMode.LOOP);
         anchorX.put(idle, 16);
         anchorX.put(run, 16);
         anchorX.put(jump, 14);
-        anchorX.put(shoot, 16);
         anchorX.put(die, 58);
         anchorX.put(alienWalk, 28);
         anchorX.put(alienIdle, 24);
@@ -141,6 +161,63 @@ public class Art {
         Texture t = new Texture(path);
         textures.add(t);
         return t;
+    }
+
+    /**
+     * 스트립을 읽으며 프레임마다 어깨 앞쪽 띠(팔뚝·손·총)를 지운다. 프레임마다 몸이 위아래로 흔들리므로
+     * 헬멧 왼쪽 위 픽셀을 찾아 대기 프레임 0과의 차이만큼 띠를 옮긴다. 어깨 위치도 같이 기록한다.
+     */
+    private Animation<TextureRegion> armlessStrip(String path, int frameWidth, float frameTime, Animation.PlayMode mode) {
+        Pixmap pm = new Pixmap(Gdx.files.internal(path));
+        pm.setBlending(Pixmap.Blending.None);
+        int h = pm.getHeight();
+        Array<int[]> offsets = new Array<>();
+        for (int fx = 0; fx < pm.getWidth(); fx += frameWidth) {
+            int[] top = firstOpaque(pm, fx, frameWidth);
+            int dx = top[0] - fx - HELMET_X, dy = top[1] - HELMET_Y;
+            for (int ry = ARM_TOP; ry <= ARM_BOTTOM; ry++) {
+                for (int rx = ARM_LEFT; rx < frameWidth - dx; rx++) {
+                    int x = fx + rx + dx, y = ry + dy;
+                    if (rx > TORSO_RIGHT) pm.drawPixel(x, y, 0);
+                    else if (ry >= FILL_TOP && (pm.getPixel(x, y) & 0xff) > 128) pm.drawPixel(x, y, TORSO_FILL);
+                }
+            }
+            offsets.add(new int[] {dx, dy});
+        }
+        Texture t = new Texture(pm);
+        pm.dispose();
+        textures.add(t);
+        Array<TextureRegion> frames = new Array<>();
+        for (int i = 0; i < offsets.size; i++) {
+            TextureRegion r = new TextureRegion(t, i * frameWidth, 0, frameWidth, h);
+            int[] o = offsets.get(i);
+            shoulder.put(r, new Vector2(SHOULDER_X + o[0], h - (SHOULDER_Y + o[1])));
+            frames.add(r);
+        }
+        return new Animation<>(frameTime, frames, mode);
+    }
+
+    /** 프레임에서 위에서부터 처음 나오는 불투명 픽셀 {x, y} (헬멧 꼭대기). */
+    private static int[] firstOpaque(Pixmap pm, int fx, int fw) {
+        for (int y = 0; y < pm.getHeight(); y++) {
+            for (int x = fx; x < fx + fw; x++) {
+                if ((pm.getPixel(x, y) & 0xff) > 128) return new int[] {x, y};
+            }
+        }
+        throw new IllegalStateException("empty frame at x=" + fx);
+    }
+
+    /** 대기 프레임에서 팔+총 조각을 오린다. 맨 윗줄(옷깃)의 몸통 쪽은 몸에 남기므로 조각에서는 지운다. */
+    private TextureRegion cutArm(Pixmap src, int gunEnd) {
+        int w = gunEnd - ARM_LEFT + 1, h = ARM_BOTTOM - ARM_TOP + 1;
+        Pixmap piece = new Pixmap(w, h, Pixmap.Format.RGBA8888);
+        piece.setBlending(Pixmap.Blending.None);
+        piece.drawPixmap(src, 0, 0, ARM_LEFT, ARM_TOP, w, h);
+        for (int x = 0; x <= TORSO_RIGHT - ARM_LEFT; x++) piece.drawPixel(x, 0, 0);
+        Texture t = new Texture(piece);
+        piece.dispose();
+        textures.add(t);
+        return new TextureRegion(t);
     }
 
     private Animation<TextureRegion> strip(String path, int frameWidth, float frameTime, Animation.PlayMode mode) {

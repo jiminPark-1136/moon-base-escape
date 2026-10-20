@@ -9,7 +9,7 @@ import com.badlogic.gdx.utils.Array;
 
 /** 게임 로직. 강의 10장 설계대로 World는 로직만, 카메라 연출은 CameraManager가 맡는다. */
 public class World {
-    public static final float WORLD_WIDTH = 3840;
+    public static final float WORLD_WIDTH = 4800;
     public static final float WORLD_HEIGHT = 720;
 
     private static final float MOVE_SPEED = 200; // 강의 260에서 낮춤 (플레이테스트 피드백)
@@ -56,7 +56,7 @@ public class World {
     public final Body player = new Body(START_X, START_Y, PLAYER_W, STAND_H);
     public final Array<Rectangle> blocks = new Array<>();
     /** 출구. 닿으면 스테이지 클리어. */
-    public final Rectangle flag = new Rectangle(3700, 64, 48, 56);
+    public final Rectangle flag = new Rectangle(4700, 64, 48, 56);
     public final Array<Bullet> bullets = new Array<>();
     public final Array<Enemy> enemies = new Array<>();
     public final Array<Particle> particles = new Array<>();
@@ -65,14 +65,29 @@ public class World {
     public final Array<Rectangle> stations = new Array<>();
     /** 창문 {유리 x, y, w, h, 방 x, y, w, h} — 재시작 때마다 새 유리로 다시 만든다. */
     private final float[][] windowSpawns = {
-        {2560, 300, 128, 96, 2496, 64, 304, 592},  // 샷건 벽과 앉기 통로 사이 방
+        // 창문은 적이 다니는 높이(바닥 근처)에 둔다 → 적을 향해 쏘다 빗나간 탄·샷건 펠릿이 창문을 깬다
+        {2600, 80, 128, 96, 2496, 64, 304, 592},   // E. 샷건 벽과 앉기 통로 사이 방 (적 2마리 바로 뒤)
+        {1330, 80, 128, 96, 900, 64, 860, 592},    // B. 계단 실험실 (계단 아래 적 무리 뒤)
+        {4040, 80, 160, 96, 3700, 64, 800, 368},   // G. 위쪽 통로 아래 방 (적 3마리 사이)
     };
     /** 적 시작 위치 {x, y, 오른쪽을 보면 1} — 재시작 때마다 여기서 다시 만든다. */
     private final float[][] enemySpawns = {
-        {800, 64, 0},    // 첫 상자 뒤
-        {2000, 64, 1},   // 구덩이 건너편
-        {2650, 64, 0},   // 샷건 벽 뒤 (창문 방)
-        {3150, 64, 1},   // 앉기 통로 뒤
+        {760, 64, 0},    // A. 시작 연구실
+        {700, 240, 1},   // A. 선반 위
+        {1250, 64, 1},   // B. 계단 실험실 — 창문 앞
+        {1450, 64, 0},   // B. 계단 실험실 — 창문 앞
+        {1350, 256, 1},  // B. 계단 위
+        {1650, 360, 0},  // 위층 통로
+        {2000, 360, 1},  // 위층 통로 (구덩이 위)
+        {2000, 64, 1},   // 구덩이 건너편 (아래 길)
+        {2580, 64, 0},   // E. 창문 방 — 창문 앞
+        {2700, 64, 1},   // E. 창문 방 — 창문 앞
+        {3250, 64, 1},   // G. 계단 아래
+        {3900, 464, 0},  // G. 위쪽 통로
+        {4300, 464, 1},  // G. 위쪽 통로
+        {3950, 64, 0},   // G. 아래쪽 방
+        {4100, 64, 1},   // G. 아래쪽 방 — 창문 앞
+        {4300, 64, 0},   // G. 아래쪽 방
     };
 
     public float oxygen;
@@ -104,25 +119,37 @@ public class World {
     private boolean cleared;
 
     public World() {
-        // 1스테이지: 연구동 (1G 인공중력). 바닥 윗면 y = 64, 천장 아랫면 y = 656.
-        // 왼쪽부터 순서대로 조작을 하나씩 가르치는 구조.
-        blocks.add(new Rectangle(0, 0, 1760, 64));       // 바닥 (왼쪽)
-        blocks.add(new Rectangle(1872, 0, 1968, 64));    // 바닥 (오른쪽) — 사이 112px 구덩이
-        blocks.add(new Rectangle(0, 656, 3840, 64));     // 천장
+        // 1스테이지: 연구동 (1G 인공중력). 바닥 윗면 y = 64, 천장 아랫면 y = 656. 화면 높이(720)와 같아 카메라는 가로로만 움직인다.
+        // 1G 점프 높이 약 119, 점프 + 샷건 약 188, 제자리 점프로 건너는 거리 약 153.
+        blocks.add(new Rectangle(0, 0, 1760, 64));        // 바닥 (왼쪽)
+        blocks.add(new Rectangle(1872, 0, 2928, 64));     // 바닥 (오른쪽) — 사이 112px 구덩이
+        blocks.add(new Rectangle(0, 656, 4800, 64));      // 천장
 
-        blocks.add(new Rectangle(520, 64, 64, 64));      // ① 상자: 점프 (높이 64)
-        blocks.add(new Rectangle(1100, 64, 96, 96));     // ② 계단식 발판: 윗면 160
-        blocks.add(new Rectangle(1300, 224, 192, 32));   //    윗면 256
-        blocks.add(new Rectangle(1560, 160, 128, 32));   //    윗면 192
-        //                                                  ③ x 1760~1872 구덩이: 떨어지면 처음부터 (강의 낙사 재시작)
-        blocks.add(new Rectangle(2400, 64, 96, 160));    // ④ 벽: 높이 160. 1G 점프(약 119)로는 못 넘고
-                                                         //    점프 + 샷건 반동(약 69)이어야 넘는다
-        blocks.add(new Rectangle(2800, 116, 256, 540));  // ⑤ 낮은 통로: 바닥과 52px 틈 → 앉아서(높이 44)만 통과
-        blocks.add(new Rectangle(3300, 64, 128, 64));    // ⑥ 출구 앞 발판
-        blocks.add(new Rectangle(3460, 64, 128, 128));
+        // A. 시작 연구실: 상자 → 선반 (높이 64 → 208)
+        blocks.add(new Rectangle(520, 64, 64, 64));
+        blocks.add(new Rectangle(650, 208, 250, 32));
+        // B. 계단 실험실 (창문 1): 윗면 160 → 256 → 192
+        blocks.add(new Rectangle(1100, 64, 96, 96));
+        blocks.add(new Rectangle(1300, 224, 192, 32));
+        blocks.add(new Rectangle(1560, 160, 128, 32));
+        // 위층 통로 (윗면 360): 계단 꼭대기(256)에서 이어져 구덩이 위를 건너 샷건 벽 앞까지 → 아래 길과 갈림
+        blocks.add(new Rectangle(1500, 328, 700, 32));
+        // C. x 1760~1872 구덩이: 떨어지면 처음부터 (강의 낙사 재시작)
+        // D. 샷건 벽: 높이 160 → 점프(119)로는 못 넘고 점프 + 샷건 반동이어야 넘는다
+        blocks.add(new Rectangle(2400, 64, 96, 160));
+        // E. 창문 방 2 (샷건 벽과 앉기 통로 사이)
+        // F. 앉기 통로: 바닥과 52px 틈 → 앉아서(높이 44)만 통과
+        blocks.add(new Rectangle(2800, 116, 256, 540));
+        // G. 계단 (윗면 164 → 264 → 364) → 위쪽 통로(윗면 464)와 아래쪽 방(창문 3, 적 2마리)으로 갈림
+        blocks.add(new Rectangle(3150, 132, 128, 32));
+        blocks.add(new Rectangle(3330, 232, 128, 32));
+        blocks.add(new Rectangle(3510, 332, 128, 32));
+        blocks.add(new Rectangle(3700, 432, 800, 32));
+        // H. 출구: 두 길이 다시 만나는 오른쪽 끝
 
         stations.add(new Rectangle(2300, 64, 40, 64));   // 샷건 벽 앞
-        stations.add(new Rectangle(3200, 64, 40, 64));   // 앉기 통로 뒤
+        stations.add(new Rectangle(3080, 64, 40, 64));   // 앉기 통로 뒤
+        stations.add(new Rectangle(4560, 64, 40, 64));   // 출구 앞
         reset();
     }
 
@@ -183,7 +210,7 @@ public class World {
         invulnerable = Math.max(0, invulnerable - dt);
         aimX = aimWorldX;
         aimY = aimWorldY;
-        facingRight = aimX >= player.bounds.x + player.bounds.width / 2;
+        facingRight = aimX >= player.bounds.x + player.bounds.width / 2; // 조준점이 몸 앞쪽이면 그쪽을 본다
 
         handleWeaponKeys();
         if (Gdx.input.isKeyJustPressed(Input.Keys.G)) {
@@ -270,18 +297,32 @@ public class World {
         b.height = want ? CROUCH_H : STAND_H;
     }
 
-    /** 총구: 스페이스 마린 스프라이트의 소총 끝 (바라보는 쪽으로 몸 중심에서 36) */
+    /** 어깨(팔·총 회전축). Art의 대기 프레임 어깨(x 9, 위에서 21.5)를 월드 단위로 옮긴 값 — 발에서 53, 앉으면 75%. */
+    public float shoulderX() {
+        return centerX(player.bounds) + (facingRight ? -14 : 14);
+    }
+
+    public float shoulderY() {
+        return player.bounds.y + (crouching ? 40 : 53);
+    }
+
+    /** 어깨에서 조준점으로 향하는 각도(도). 팔·총 그림과 총알 방향이 모두 이 값을 쓴다. */
+    public float aimAngle() {
+        return MathUtils.atan2(aimY - shoulderY(), aimX - shoulderX()) * MathUtils.radiansToDegrees;
+    }
+
+    /** 총구 = 어깨에서 조준 방향으로 총 길이만큼 */
     public float muzzleX() {
-        return player.bounds.x + player.bounds.width / 2 + (facingRight ? 36 : -36);
+        return shoulderX() + MathUtils.cosDeg(aimAngle()) * weapon.barrel;
     }
 
     public float muzzleY() {
-        return player.bounds.y + player.bounds.height * 0.6f;
+        return shoulderY() + MathUtils.sinDeg(aimAngle()) * weapon.barrel;
     }
 
     private void fire() {
         float mx = muzzleX(), my = muzzleY();
-        float angle = MathUtils.atan2(aimY - my, aimX - mx) * MathUtils.radiansToDegrees;
+        float angle = aimAngle();
 
         for (int i = 0; i < weapon.pellets; i++) {
             float a = angle + MathUtils.random(-weapon.spreadDeg, weapon.spreadDeg);
@@ -402,10 +443,9 @@ public class World {
             Enemy e = enemies.get(i);
             Rectangle eb = e.body.bounds;
             Window open = brokenWindowAround(eb);
-            if (open != null) { // 감압: 외계인은 버티지 못하고 창문으로 끌려가 빨려 나간다
+            if (open != null) { // 감압: 외계인은 버티지 못하고 창문(바닥 높이)으로 끌려가 빨려 나간다
                 float dx = open.centerX() - centerX(eb);
                 e.pull(Math.signum(dx) * SUCTION * 1.5f * dt);
-                if (Math.abs(dx) < open.glass.width / 2 && e.body.grounded) e.body.vy = 950;
                 if (eb.overlaps(open.glass)) {
                     bleed(centerX(eb), eb.y + eb.height / 2, 0, 400, ALIEN_BLOOD, 20);
                     enemies.removeIndex(i);

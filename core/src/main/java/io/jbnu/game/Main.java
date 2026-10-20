@@ -97,8 +97,22 @@ public class Main extends ApplicationAdapter {
      */
     private final String autoShotDir = System.getProperty("autoshot");
     private int frameCount;
+    /** 자동 스크린샷 때 마우스 대신 쓸 조준 방향 (어깨 기준 오프셋). null이면 마우스. */
+    private com.badlogic.gdx.math.Vector2 autoAim;
+    /** 자동 스크린샷의 맵 전체 장면: 카메라 추적을 멈춘다 */
+    private boolean overview;
     private final Object[][] autoShots = {
-        {"look0", (Runnable) () -> world.gravityIndex = 1},
+        {"look0", (Runnable) () -> autoAim = new com.badlogic.gdx.math.Vector2(200, 0)},
+        {"arm-pistol-right", (Runnable) () -> {
+            world.weapon = Weapon.SHOTGUN;
+            autoAim.set(120, 160);
+        }},
+        {"arm-shotgun-up", (Runnable) () -> autoAim.set(-150, -110)},
+        {"arm-shotgun-downleft", (Runnable) () -> {
+            autoAim = null;
+            world.weapon = Weapon.PISTOL;
+            world.gravityIndex = 1;
+        }},
         {"look1", (Runnable) () -> world.gravityIndex = 2},
         {"look2", (Runnable) () -> {           // 창문 방이 보이는 샷건 벽 위로 이동
             world.gravityIndex = 0;
@@ -111,7 +125,14 @@ public class Main extends ApplicationAdapter {
             world.oxygen = 12;
             world.leak = 2;
         }},
-        {"low-oxygen", null},
+        {"low-oxygen", (Runnable) () -> {        // 맵 전체가 보이게 카메라를 멀리 뺀다
+            world.oxygen = World.MAX_OXYGEN;
+            overview = true;
+            camera.zoom = World.WORLD_WIDTH / VIEW_W;
+            camera.position.set(World.WORLD_WIDTH / 2, World.WORLD_HEIGHT / 2, 0);
+            camera.update();
+        }},
+        {"map-overview", null},
     };
 
     /** F12: 현재 화면을 screenshots/ 에 저장 (레포트·발표 자료용). */
@@ -154,6 +175,7 @@ public class Main extends ApplicationAdapter {
 
         if (currentState == GameState.PLAYING) {
             viewport.unproject(mouse.set(Gdx.input.getX(), Gdx.input.getY(), 0)); // 화면 좌표 → 월드 좌표
+            if (autoAim != null) mouse.set(world.shoulderX() + autoAim.x, world.shoulderY() + autoAim.y, 0);
             world.update(dt, mouse.x, mouse.y);
             if (world.firedThisStep == Weapon.SHOTGUN) camManager.startShake(0.15f, 8f);
             else if (world.firedThisStep == Weapon.PISTOL) camManager.startShake(0.05f, 2f);
@@ -162,7 +184,7 @@ public class Main extends ApplicationAdapter {
             if (world.windowBrokeThisStep) camManager.startShake(0.8f, 18f);
             endingCheck();
         }
-        camManager.update(camera, playerCenterX(), playerCenterY(), dt);
+        if (!overview) camManager.update(camera, playerCenterX(), playerCenterY(), dt);
         updatePlayerAnim(dt);
         elapsed += dt;
     }
@@ -174,7 +196,6 @@ public class Main extends ApplicationAdapter {
         Animation<TextureRegion> next;
         if (world.playerDead()) next = art.die;
         else if (!p.grounded) next = art.jump;
-        else if (shootPoseTimer > 0) next = art.shoot; // 서서 쏠 때 총구 화염 모션
         else if (Math.abs(p.vx) > 10 && !world.crouching) next = art.run;
         else next = art.idle; // 앉기 전용 그림이 없어 대기 모션을 눌러서 그린다 (drawActor)
         if (next != playerAnim) {
@@ -238,6 +259,7 @@ public class Main extends ApplicationAdapter {
         boolean blink = world.invulnerable > 0 && ((int) (world.invulnerable * 10)) % 2 == 0;
         batch.setColor(1, 1, 1, blink ? 0.3f : 1f);
         drawActor(playerAnim, animTime, world.player.bounds, world.facingRight, world.crouching ? 0.75f : 1f);
+        if (!world.playerDead()) drawArmAndGun(blink ? 0.3f : 1f);
         batch.setColor(Color.WHITE);
 
         for (World.Particle pt : world.particles) {
@@ -305,6 +327,38 @@ public class Main extends ApplicationAdapter {
         boolean asDrawn = facingRight != art.facesLeft.contains(a); // 원본 방향 그대로 그려도 되는지
         if (asDrawn) batch.draw(frame, cx - anchor, b.y, w, h);
         else batch.draw(frame, cx + anchor, b.y, -w, h); // 좌우 반전
+    }
+
+    /**
+     * 팔+총 조각을 어깨를 축으로 조준 각도만큼 돌려 그린다. 왼쪽을 볼 때는 위아래를 뒤집어
+     * 총이 거꾸로 서지 않게 한다. 쏜 직후에는 총구에 화염을 그린다.
+     */
+    private void drawArmAndGun(float alpha) {
+        TextureRegion arm = world.weapon == Weapon.SHOTGUN ? art.shotgunArm : art.pistolArm;
+        float w = arm.getRegionWidth() * Art.SCALE, h = arm.getRegionHeight() * Art.SCALE;
+        float originX = Art.ARM_PIVOT_X * Art.SCALE, originY = Art.ARM_PIVOT_Y * Art.SCALE;
+        // 어깨: 지금 몸 프레임에 기록된 위치 (달리기 프레임은 몸이 조금 낮다)
+        TextureRegion body = playerAnim.getKeyFrame(animTime);
+        com.badlogic.gdx.math.Vector2 s = art.shoulder.get(body);
+        float sx = world.shoulderX(), sy = world.shoulderY();
+        if (s != null) {
+            Rectangle b = world.player.bounds;
+            float off = (s.x - art.anchorX.get(playerAnim, 0)) * Art.SCALE;
+            sx = b.x + b.width / 2 + (world.facingRight ? off : -off);
+            sy = b.y + s.y * Art.SCALE * (world.crouching ? 0.75f : 1f);
+        }
+        batch.setColor(1, 1, 1, alpha);
+        batch.draw(arm, sx - originX, sy - originY, originX, originY, w, h, 1, world.facingRight ? 1 : -1, world.aimAngle());
+
+        if (shootPoseTimer > 0) {
+            float size = world.weapon == Weapon.SHOTGUN ? 18 : 10;
+            float mx = world.muzzleX(), my = world.muzzleY();
+            batch.setColor(1f, 0.85f, 0.3f, 1f);
+            batch.draw(pixel, mx - size / 2, my - size / 2, size / 2, size / 2, size, size, 1, 1, world.aimAngle() + 45);
+            batch.setColor(1f, 1f, 0.8f, 1f);
+            batch.draw(pixel, mx - size / 4, my - size / 4, size / 2, size / 2);
+        }
+        batch.setColor(Color.WHITE);
     }
 
     /**
