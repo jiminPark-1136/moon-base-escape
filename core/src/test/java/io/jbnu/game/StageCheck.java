@@ -14,7 +14,7 @@ public class StageCheck {
     public static void main(String[] args) {
         //            스테이지, 샷건이 필요한 높이들
         check(0, new float[] {160});            // 1: 샷건 벽
-        check(1, new float[] {256});            // 2: 감압 복도 끝 칸막이
+        check(1, new float[] {});               // 2: 샷건 필수 장애물 없음 (감압 복도는 앉아서 기어 통과)
         check(2, new float[] {600, 400, 300});  // 3: 고원, 메사
         System.out.println("OK");
     }

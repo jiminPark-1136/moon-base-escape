@@ -11,9 +11,9 @@ public class OxygenWindowCheck {
         // 산소: 기지 안에서는 누출이 있어도 줄지 않고, 진공에서만 기본 소모 + 누출 단계당 3
         assert World.oxygenDrain(false, false, 3) == 0 : "no drain inside the base";
         assert World.oxygenDrain(true, false, 0) == 2 : "moon surface base drain";
-        assert World.oxygenDrain(false, true, 0) == 8 : "broken room drain";
-        assert World.oxygenDrain(false, true, 2) == 14 : "broken room + leak x2";
-        System.out.println("산소 소모/초: 기지 0, 달 표면 2, 깨진 방 8, 깨진 방+누출2 14");
+        assert World.oxygenDrain(false, true, 0) == 5 : "broken room drain";
+        assert World.oxygenDrain(false, true, 2) == 11 : "broken room + leak x2";
+        System.out.println("산소 소모/초: 기지 0, 달 표면 2, 깨진 방 5, 깨진 방+누출2 11");
 
         // 창문: 권총(1발)은 10번째에 깨지고, 샷건(펠릿 5발)은 2번째 발사에 깨진다
         Window byPistol = new Window(new Rectangle(0, 0, 128, 96), new Rectangle(0, 0, 300, 600));

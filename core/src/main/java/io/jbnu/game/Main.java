@@ -150,7 +150,7 @@ public class Main extends ApplicationAdapter {
             camera.zoom = 1;
             startStage(1);
             bannerTimer = 0;
-            world.player.bounds.setPosition(900, 64);
+            world.player.bounds.setPosition(1350, 64); // 감압 복도 가운데: 깨진 창문과 끝 칸막이가 함께 보인다
             snapCamera();
         }},
         {"stage2-droppers", (Runnable) () -> {   // 3스테이지 크레이터 건너편: 스피터의 산성탄

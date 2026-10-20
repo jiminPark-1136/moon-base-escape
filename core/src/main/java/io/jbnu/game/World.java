@@ -42,11 +42,15 @@ public class World {
     /** 산소 = 체력. 0이 되면 사망 → 잠시 후 재시작. */
     public static final float MAX_OXYGEN = 100;
     /** 진공에서 초당 산소 소모: 달 표면(기본 호흡) / 창문이 깨진 방(급격한 감압) / 누출 단계마다 추가 */
-    static final float DRAIN_SURFACE = 2, DRAIN_BROKEN_ROOM = 8, DRAIN_PER_LEAK = 3;
+    static final float DRAIN_SURFACE = 2, DRAIN_BROKEN_ROOM = 5, DRAIN_PER_LEAK = 3;
     public static final int MAX_LEAK = 3;
     private static final float STATION_REFILL = 40;
-    /** 깨진 창문 쪽으로 빨아들이는 가속도(월드 단위/초²). 앉으면 절반. */
-    private static final float SUCTION = 900, CROUCH_SUCTION = 0.5f;
+    /**
+     * 깨진 창문 쪽으로 빨아들이는 가속도(월드 단위/초²)와, 흡입만으로 끌려가는 최대 속도. 앉으면 둘 다 절반.
+     * 상한이 없으면 공중에서는 감속이 약해 끌려가는 속도가 약 600까지 쌓여 점프하는 순간 창문으로 날아간다.
+     * 걷는 속도(200)보다 낮게 두어 흡입을 거슬러 나아갈 수 있게 한다. 샷건 반동은 이 상한과 상관없다.
+     */
+    private static final float SUCTION = 900, SUCTION_MAX_SPEED = 120, CROUCH_SUCTION = 0.5f;
     private static final Color GLASS = new Color(0.65f, 0.9f, 1f, 1f);
     private static final float CONTACT_DAMAGE = 20, INVULNERABLE_TIME = 1.0f, DEATH_TIME = 1.5f;
     private static final Color PLAYER_BLOOD = new Color(0.75f, 0.05f, 0.05f, 1f);
@@ -214,7 +218,9 @@ public class World {
         Window open = brokenWindowAround(player.bounds);
         if (open != null) { // 감압: 깨진 창문 쪽으로 끌려간다. 앉아서 버티면 절반
             float dir = Math.signum(open.centerX() - centerX(player.bounds));
-            kickX += dir * SUCTION * (crouching ? CROUCH_SUCTION : 1f) * dt;
+            float mult = crouching ? CROUCH_SUCTION : 1f;
+            float along = kickX * dir; // 지금 창문 쪽으로 끌려가는 속도
+            if (along < SUCTION_MAX_SPEED * mult) kickX = dir * Math.min(SUCTION_MAX_SPEED * mult, along + SUCTION * mult * dt);
         }
         player.vx = inputVx + kickX;
         if (player.moveX(dt, blocks, stage.width)) kickX = 0;
