@@ -1,11 +1,21 @@
-# 게임 및 혼합현실 중간 프로젝트
+# Moon Base Escape
 
-달 연구기지 탈출 2D 런앤건 플랫포머 (LibGDX 1.13.1)
+달 연구기지를 탈출하는 2D 런앤건 플랫포머입니다 (Java, LibGDX 1.13.1). 스테이지마다 중력이 약해지고, 같은 샷건 반동이 중력에 따라 이동기가 되기도 하고 위험이 되기도 합니다.
+
+전북대학교 게임 및 혼합현실 수업 중간 프로젝트입니다.
 
 ![](docs/images/history/v0.4-marine-crawler.png)
 
+- 플레이테스트 버전 받기: [Releases](https://github.com/jiminPark-1136/moon-base-escape/releases) (윈도우·맥·리눅스)
 - 기획·일정: [PLAN.md](PLAN.md)
 - 개발 일지: [docs/DEVLOG.md](docs/DEVLOG.md)
+
+## 개발 방식
+
+- 기획과 컨셉: 첫 컨셉(시간 되감기 퍼즐)을 접고 런앤건으로 바꿨고, 독창 요소 3개(중력 연동 반동, 산소 = 체력, 감압 창문)를 정했습니다.
+- 조작과 수치: 서든어택식 조작, 무기별 반동·연사·탄창, 스테이지별 중력을 정했습니다.
+- 플레이테스트: 4차례 플레이테스트 피드백을 정리해 수정 방향을 정했습니다. 과정은 [개발 일지](docs/DEVLOG.md)에 남겼습니다.
+- 코드 작성: Claude Code(AI 코딩 도구)와 함께 작성했습니다. 커밋의 `Co-Authored-By` 줄이 그 표시입니다. 동작은 `core/src/test`의 검증 코드와 직접 플레이로 확인했습니다.
 
 ## 실행
 
@@ -115,7 +125,7 @@ java -ea -cp "core/build/classes/java/main:core/build/classes/java/test:$(find ~
 | `assets/backgrounds/lunar/`, `assets/tiles/lunar_tilesheet.png` | [Lunar Battle Pack](https://mattwalkden.itch.io/lunar-battle-pack) — Matt Walkden |
 | `assets/fonts/Galmuri11.ttf` | [갈무리](https://github.com/quiple/galmuri) — 이민서(quiple), **SIL OFL 1.1** (라이선스: `assets/fonts/Galmuri-OFL.md`) |
 
-- 원본: `art-source/` (게임에서 미사용)
+- 원본 압축 파일은 레포에 넣지 않았습니다. 위 출처 링크에서 받을 수 있습니다.
 - 이전 버전 에셋: [Space soldier](https://opengameart.org/content/space-soldier-sprite-sheet-32x32) — drakzlin, [Sci-fi platform tiles](https://opengameart.org/content/sci-fi-platform-tiles) — Eris
 
 ## 스프라이트 수정
