@@ -20,7 +20,7 @@ public class EnemyCheck {
         Enemy patrol = new Enemy(300, 64, true);
         boolean turned = false;
         for (int i = 0; i < 600; i++) {
-            patrol.update(DT, G, floor, farPlayer);
+            patrol.update(DT, G, floor, farPlayer, 10000);
             if (!patrol.facingRight) turned = true;
         }
         assert turned : "patrol should turn at ledge";
@@ -31,10 +31,10 @@ public class EnemyCheck {
         //    (플레이어를 지나치면 '앞에 있음' 조건이 풀려 순찰로 돌아가므로, 건너편에 둔다)
         Enemy charger = new Enemy(200, 64, true);
         Rectangle player = new Rectangle(480, 64, 36, 60);
-        charger.update(DT, G, floor, player);
-        charger.update(DT, G, floor, player);
+        charger.update(DT, G, floor, player, 10000);
+        charger.update(DT, G, floor, player, 10000);
         assert charger.charging : "should charge when player in front";
-        for (int i = 0; i < 300; i++) charger.update(DT, G, floor, player);
+        for (int i = 0; i < 300; i++) charger.update(DT, G, floor, player, 10000);
         assert charger.body.bounds.y < 0 : "charging enemy should fall into the pit: y=" + charger.body.bounds.y;
         System.out.println("②③ 돌진 후 구덩이 낙하, y=" + charger.body.bounds.y);
 

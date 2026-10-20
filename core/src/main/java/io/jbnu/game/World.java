@@ -9,17 +9,10 @@ import com.badlogic.gdx.utils.Array;
 
 /** 게임 로직. 강의 10장 설계대로 World는 로직만, 카메라 연출은 CameraManager가 맡는다. */
 public class World {
-    public static final float WORLD_WIDTH = 4800;
-    public static final float WORLD_HEIGHT = 720;
 
     private static final float MOVE_SPEED = 200; // 강의 260에서 낮춤 (플레이테스트 피드백)
-    private static final float JUMP_SPEED = 650;
     /** 강의의 GRAVITY 1700을 지구 중력 1G로 둔다. */
     private static final float EARTH_GRAVITY = 1700;
-    /** 1스테이지 인공중력 1G, 2스테이지 (1G + 달)/2, 3스테이지 달 중력. */
-    public static final float[] GRAVITY_SCALES = {1f, 0.58f, 0.16f};
-
-    private static final float START_X = 80, START_Y = 64;
     /** 히트박스. 32px 트루퍼를 2배로 그렸을 때 몸통에 맞춘 크기. */
     private static final float PLAYER_W = 36, STAND_H = 60, CROUCH_H = 44;
     private static final float CROUCH_RECOIL = 0.5f;
@@ -53,43 +46,16 @@ public class World {
     private static final Color PLAYER_BLOOD = new Color(0.75f, 0.05f, 0.05f, 1f);
     private static final Color ALIEN_BLOOD = new Color(0.55f, 0.75f, 0.10f, 1f);
 
-    public final Body player = new Body(START_X, START_Y, PLAYER_W, STAND_H);
+    public final Body player = new Body(0, 0, PLAYER_W, STAND_H);
     public final Array<Rectangle> blocks = new Array<>();
     /** 출구. 닿으면 스테이지 클리어. */
-    public final Rectangle flag = new Rectangle(4700, 64, 48, 56);
+    public Rectangle flag;
     public final Array<Bullet> bullets = new Array<>();
     public final Array<Enemy> enemies = new Array<>();
     public final Array<Particle> particles = new Array<>();
     public final Array<Window> windows = new Array<>();
     /** 산소 스테이션: 서 있으면 충전 + 누출 수리 */
     public final Array<Rectangle> stations = new Array<>();
-    /** 창문 {유리 x, y, w, h, 방 x, y, w, h} — 재시작 때마다 새 유리로 다시 만든다. */
-    private final float[][] windowSpawns = {
-        // 창문은 적이 다니는 높이(바닥 근처)에 둔다 → 적을 향해 쏘다 빗나간 탄·샷건 펠릿이 창문을 깬다
-        {2600, 80, 128, 96, 2496, 64, 304, 592},   // E. 샷건 벽과 앉기 통로 사이 방 (적 2마리 바로 뒤)
-        {1330, 80, 128, 96, 900, 64, 860, 592},    // B. 계단 실험실 (계단 아래 적 무리 뒤)
-        {4040, 80, 160, 96, 3700, 64, 800, 368},   // G. 위쪽 통로 아래 방 (적 3마리 사이)
-    };
-    /** 적 시작 위치 {x, y, 오른쪽을 보면 1} — 재시작 때마다 여기서 다시 만든다. */
-    private final float[][] enemySpawns = {
-        {760, 64, 0},    // A. 시작 연구실
-        {700, 240, 1},   // A. 선반 위
-        {1250, 64, 1},   // B. 계단 실험실 — 창문 앞
-        {1450, 64, 0},   // B. 계단 실험실 — 창문 앞
-        {1350, 256, 1},  // B. 계단 위
-        {1650, 360, 0},  // 위층 통로
-        {2000, 360, 1},  // 위층 통로 (구덩이 위)
-        {2000, 64, 1},   // 구덩이 건너편 (아래 길)
-        {2580, 64, 0},   // E. 창문 방 — 창문 앞
-        {2700, 64, 1},   // E. 창문 방 — 창문 앞
-        {3250, 64, 1},   // G. 계단 아래
-        {3900, 464, 0},  // G. 위쪽 통로
-        {4300, 464, 1},  // G. 위쪽 통로
-        {3950, 64, 0},   // G. 아래쪽 방
-        {4100, 64, 1},   // G. 아래쪽 방 — 창문 앞
-        {4300, 64, 0},   // G. 아래쪽 방
-    };
-
     public float oxygen;
     /** 우주복 누출 단계 0~3. 피격마다 +1, 스테이션에서 0으로 수리. */
     public int leak;
@@ -104,7 +70,6 @@ public class World {
     /** 이번 스텝에 플레이어가 맞았는지 (카메라 흔들림용) */
     public boolean playerHitThisStep;
 
-    public int gravityIndex = 0;
     public Weapon weapon = Weapon.PISTOL;
     public final int[] ammo = new int[Weapon.values().length];
     public float reloadTimer;
@@ -118,52 +83,43 @@ public class World {
     private float cooldownTimer;
     private boolean cleared;
 
+    /** 지금 스테이지 (0부터). 데이터는 Stage에 있다. */
+    public int stageIndex;
+    public Stage stage;
+    /** 지금까지 죽은 횟수 (전체 클리어 화면에 표시) */
+    public int deaths;
+
     public World() {
-        // 1스테이지: 연구동 (1G 인공중력). 바닥 윗면 y = 64, 천장 아랫면 y = 656. 화면 높이(720)와 같아 카메라는 가로로만 움직인다.
-        // 1G 점프 높이 약 119, 점프 + 샷건 약 188, 제자리 점프로 건너는 거리 약 153.
-        blocks.add(new Rectangle(0, 0, 1760, 64));        // 바닥 (왼쪽)
-        blocks.add(new Rectangle(1872, 0, 2928, 64));     // 바닥 (오른쪽) — 사이 112px 구덩이
-        blocks.add(new Rectangle(0, 656, 4800, 64));      // 천장
+        loadStage(0);
+    }
 
-        // A. 시작 연구실: 상자 → 선반 (높이 64 → 208)
-        blocks.add(new Rectangle(520, 64, 64, 64));
-        blocks.add(new Rectangle(650, 208, 250, 32));
-        // B. 계단 실험실 (창문 1): 윗면 160 → 256 → 192
-        blocks.add(new Rectangle(1100, 64, 96, 96));
-        blocks.add(new Rectangle(1300, 224, 192, 32));
-        blocks.add(new Rectangle(1560, 160, 128, 32));
-        // 위층 통로 (윗면 360): 계단 꼭대기(256)에서 이어져 구덩이 위를 건너 샷건 벽 앞까지 → 아래 길과 갈림
-        blocks.add(new Rectangle(1500, 328, 700, 32));
-        // C. x 1760~1872 구덩이: 떨어지면 처음부터 (강의 낙사 재시작)
-        // D. 샷건 벽: 높이 160 → 점프(119)로는 못 넘고 점프 + 샷건 반동이어야 넘는다
-        blocks.add(new Rectangle(2400, 64, 96, 160));
-        // E. 창문 방 2 (샷건 벽과 앉기 통로 사이)
-        // F. 앉기 통로: 바닥과 52px 틈 → 앉아서(높이 44)만 통과
-        blocks.add(new Rectangle(2800, 116, 256, 540));
-        // G. 계단 (윗면 164 → 264 → 364) → 위쪽 통로(윗면 464)와 아래쪽 방(창문 3, 적 2마리)으로 갈림
-        blocks.add(new Rectangle(3150, 132, 128, 32));
-        blocks.add(new Rectangle(3330, 232, 128, 32));
-        blocks.add(new Rectangle(3510, 332, 128, 32));
-        blocks.add(new Rectangle(3700, 432, 800, 32));
-        // H. 출구: 두 길이 다시 만나는 오른쪽 끝
-
-        stations.add(new Rectangle(2300, 64, 40, 64));   // 샷건 벽 앞
-        stations.add(new Rectangle(3080, 64, 40, 64));   // 앉기 통로 뒤
-        stations.add(new Rectangle(4560, 64, 40, 64));   // 출구 앞
+    /** 스테이지를 불러온다: 고정 지형(블록·스테이션)을 만들고 나머지는 reset()이 처음 상태로 만든다. */
+    public void loadStage(int index) {
+        stageIndex = index;
+        stage = Stage.get(index);
+        blocks.clear();
+        for (float[] b : stage.blocks) blocks.add(new Rectangle(b[0], b[1], b[2], b[3]));
+        stations.clear();
+        for (float[] st : stage.stations) stations.add(new Rectangle(st[0], st[1], st[2], st[3]));
+        flag = stage.exit;
         reset();
     }
 
+    public boolean isLastStage() {
+        return stageIndex == Stage.COUNT - 1;
+    }
+
     public float gravity() {
-        return EARTH_GRAVITY * GRAVITY_SCALES[gravityIndex];
+        return EARTH_GRAVITY * stage.gravityScale; // 1스테이지 1G, 2스테이지 0.58G, 3스테이지 0.16G
     }
 
     public boolean isGameClear() {
         return cleared;
     }
 
-    /** 강의 과제2의 재시작 로직을 확장: 위치뿐 아니라 탄약·총알·상태도 처음으로 되돌린다. */
+    /** 강의 과제2의 재시작 로직을 확장: 지금 스테이지의 처음 상태(위치·탄약·적·창문·산소)로 되돌린다. */
     public void reset() {
-        player.bounds.set(START_X, START_Y, PLAYER_W, STAND_H);
+        player.bounds.set(stage.startX, stage.startY, PLAYER_W, STAND_H);
         player.vx = player.vy = 0;
         player.grounded = false;
         kickX = 0;
@@ -174,10 +130,12 @@ public class World {
         bullets.clear();
         particles.clear();
         enemies.clear();
-        for (float[] s : enemySpawns) enemies.add(new Enemy(s[0], s[1], s[2] > 0));
+        for (float[] s : stage.enemies) enemies.add(new Enemy(s[0], s[1], s[2] > 0));
         windows.clear();
-        for (float[] w : windowSpawns) {
-            windows.add(new Window(new Rectangle(w[0], w[1], w[2], w[3]), new Rectangle(w[4], w[5], w[6], w[7])));
+        for (float[] w : stage.windows) {
+            Window win = new Window(new Rectangle(w[0], w[1], w[2], w[3]), new Rectangle(w[4], w[5], w[6], w[7]));
+            win.hp = (int) w[8]; // 0이면 처음부터 깨진 창문
+            windows.add(win);
         }
         oxygen = MAX_OXYGEN;
         leak = 0;
@@ -213,9 +171,7 @@ public class World {
         facingRight = aimX >= player.bounds.x + player.bounds.width / 2; // 조준점이 몸 앞쪽이면 그쪽을 본다
 
         handleWeaponKeys();
-        if (Gdx.input.isKeyJustPressed(Input.Keys.G)) {
-            gravityIndex = (gravityIndex + 1) % GRAVITY_SCALES.length; // 테스트용: 3가지 중력 순환
-        }
+        if (Gdx.input.isKeyJustPressed(Input.Keys.N)) cleared = true; // 테스트용: 이 스테이지를 바로 클리어
 
         // 1. 앉기 / 좌우 이동 / 점프 (강의: 키를 누르는 동안 속도를 매 프레임 다시 정한다)
         setCrouching(Gdx.input.isKeyPressed(Input.Keys.S) && player.grounded);
@@ -224,7 +180,7 @@ public class World {
         if (Gdx.input.isKeyPressed(Input.Keys.D)) inputVx += MOVE_SPEED;
         if (crouching) inputVx *= 0.5f;
         if (Gdx.input.isKeyJustPressed(Input.Keys.W) && player.grounded && !crouching) {
-            player.vy = JUMP_SPEED;
+            player.vy = (float) Math.sqrt(2 * gravity() * stage.jumpHeight); // 스테이지별 점프 높이 → 속도 (1G: 650)
             player.grounded = false;
         }
 
@@ -249,8 +205,12 @@ public class World {
             kickX += dir * SUCTION * (crouching ? CROUCH_SUCTION : 1f) * dt;
         }
         player.vx = inputVx + kickX;
-        if (player.moveX(dt, blocks, WORLD_WIDTH)) kickX = 0;
+        if (player.moveX(dt, blocks, stage.width)) kickX = 0;
         player.moveY(dt, blocks);
+        if (player.bounds.y + player.bounds.height > stage.height) { // 천장 없는 맵(달 표면)의 위쪽 끝
+            player.bounds.y = stage.height - player.bounds.height;
+            player.vy = Math.min(player.vy, 0);
+        }
 
         updateBullets(dt);
         updateEnemies(dt);
@@ -258,7 +218,10 @@ public class World {
         if (playerDead()) return;
 
         // 4. 낭떠러지에 떨어지면 처음부터 (강의의 낙사 복귀)
-        if (player.bounds.y < -100) reset();
+        if (player.bounds.y < -100) {
+            deaths++;
+            reset();
+        }
 
         // 5. 깃발에 닿으면 클리어
         if (player.bounds.overlaps(flag)) cleared = true;
@@ -415,7 +378,7 @@ public class World {
     }
 
     private void updateOxygen(float dt) {
-        boolean onMoon = gravityIndex == GRAVITY_SCALES.length - 1; // 3스테이지 = 기지 밖
+        boolean onMoon = stage.vacuum; // 3스테이지 = 기지 밖
         boolean inRoom = brokenWindowAround(player.bounds) != null;
         inVacuum = onMoon || inRoom;
         atStation = false;
@@ -433,6 +396,7 @@ public class World {
 
     private void killPlayer() {
         if (playerDead()) return;
+        deaths++;
         deathTimer = DEATH_TIME;
         Rectangle p = player.bounds;
         bleed(p.x + p.width / 2, p.y + p.height / 2, 0, 300, PLAYER_BLOOD, 30);
@@ -452,7 +416,7 @@ public class World {
                     continue;
                 }
             }
-            e.update(dt, gravity(), blocks, player.bounds);
+            e.update(dt, gravity(), blocks, player.bounds, stage.width);
             if (e.dead() || eb.y < -100) {
                 if (e.dead()) bleed(eb.x + eb.width / 2, eb.y + eb.height / 2, 0, 300, ALIEN_BLOOD, 30);
                 enemies.removeIndex(i);

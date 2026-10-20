@@ -11,6 +11,7 @@ import com.badlogic.gdx.graphics.PixmapIO;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
+import com.badlogic.gdx.graphics.g2d.GlyphLayout;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
@@ -27,7 +28,13 @@ public class Main extends ApplicationAdapter {
     private static final float VIEW_W = 1280, VIEW_H = 720;
 
     /** 강의 10장의 GameState를 일시정지까지 확장. */
-    private enum GameState { PLAYING, PAUSED, CLEARED }
+    /** 강의 10장 GameState를 확장: 일시정지, 스테이지 클리어(다음 스테이지 대기), 전체 클리어 */
+    private enum GameState { TITLE, PLAYING, PAUSED, STAGE_CLEAR, ALL_CLEAR }
+
+    /** 스테이지 시작 배너를 보여 줄 남은 시간 */
+    private float bannerTimer;
+    /** 1스테이지부터 잰 플레이 시간 (일시정지·클리어 화면 제외) */
+    private float playTime;
 
     private static final Color GLASS_EDGE = new Color(0.8f, 0.95f, 1f, 0.9f);
 
@@ -50,7 +57,7 @@ public class Main extends ApplicationAdapter {
 
     private World world;
     private CameraManager camManager;
-    private GameState currentState = GameState.PLAYING;
+    private GameState currentState = GameState.TITLE; // 시작 화면: 조작법을 보여 주고 아무 키나 누르면 시작
 
     @Override
     public void create() {
@@ -78,7 +85,7 @@ public class Main extends ApplicationAdapter {
 
         world = new World();
         camManager = new CameraManager();
-        camManager.snapTo(camera, playerCenterX(), playerCenterY());
+        snapCamera();
     }
 
     @Override
@@ -102,6 +109,7 @@ public class Main extends ApplicationAdapter {
     /** 자동 스크린샷의 맵 전체 장면: 카메라 추적을 멈춘다 */
     private boolean overview;
     private final Object[][] autoShots = {
+        {"title", (Runnable) () -> startStage(0)},
         {"look0", (Runnable) () -> autoAim = new com.badlogic.gdx.math.Vector2(200, 0)},
         {"arm-pistol-right", (Runnable) () -> {
             world.weapon = Weapon.SHOTGUN;
@@ -111,13 +119,14 @@ public class Main extends ApplicationAdapter {
         {"arm-shotgun-downleft", (Runnable) () -> {
             autoAim = null;
             world.weapon = Weapon.PISTOL;
-            world.gravityIndex = 1;
+            startStage(1);
         }},
-        {"look1", (Runnable) () -> world.gravityIndex = 2},
-        {"look2", (Runnable) () -> {           // 창문 방이 보이는 샷건 벽 위로 이동
-            world.gravityIndex = 0;
+        {"stage2-start", (Runnable) () -> startStage(2)},
+        {"stage3-start", (Runnable) () -> {     // 1스테이지 창문 방이 보이는 샷건 벽 위로 이동
+            startStage(0);
+            bannerTimer = 0;
             world.player.bounds.setPosition(2420, 224);
-            camManager.snapTo(camera, playerCenterX(), playerCenterY());
+            snapCamera();
         }},
         {"window-intact", (Runnable) () -> world.windows.first().hp = 4},
         {"window-cracked", (Runnable) () -> world.windows.first().hp = 0},
@@ -125,14 +134,22 @@ public class Main extends ApplicationAdapter {
             world.oxygen = 12;
             world.leak = 2;
         }},
-        {"low-oxygen", (Runnable) () -> {        // 맵 전체가 보이게 카메라를 멀리 뺀다
-            world.oxygen = World.MAX_OXYGEN;
-            overview = true;
-            camera.zoom = World.WORLD_WIDTH / VIEW_W;
-            camera.position.set(World.WORLD_WIDTH / 2, World.WORLD_HEIGHT / 2, 0);
-            camera.update();
+        {"low-oxygen", (Runnable) () -> overviewOf(0)},
+        {"stage1-overview", (Runnable) () -> overviewOf(1)},
+        {"stage2-overview", (Runnable) () -> overviewOf(2)},
+        {"stage3-overview", (Runnable) () -> {
+            overview = false;
+            camera.zoom = 1;
+            startStage(1);
+            currentState = GameState.STAGE_CLEAR;
         }},
-        {"map-overview", null},
+        {"stage-clear", (Runnable) () -> {
+            startStage(2);
+            playTime = 754;
+            world.deaths = 3;
+            currentState = GameState.ALL_CLEAR;
+        }},
+        {"all-clear", null},
     };
 
     /** F12: 현재 화면을 screenshots/ 에 저장 (레포트·발표 자료용). */
@@ -152,6 +169,17 @@ public class Main extends ApplicationAdapter {
         else ((Runnable) shot[1]).run();
     }
 
+    /** 맵 전체가 보이게 카메라를 멀리 뺀다 (자동 스크린샷용) */
+    private void overviewOf(int stage) {
+        startStage(stage);
+        bannerTimer = 0;
+        world.oxygen = World.MAX_OXYGEN;
+        overview = true;
+        camera.zoom = world.stage.width / VIEW_W;
+        camera.position.set(world.stage.width / 2, world.stage.height / 2, 0);
+        camera.update();
+    }
+
     private void saveScreenshot(String path) {
         Pixmap pm = Pixmap.createFromFrameBuffer(0, 0, Gdx.graphics.getBackBufferWidth(), Gdx.graphics.getBackBufferHeight());
         PixmapIO.writePNG(Gdx.files.absolute(new java.io.File(path).getAbsolutePath()), pm, Deflater.DEFAULT_COMPRESSION, true); // true: 위아래 뒤집기
@@ -159,21 +187,55 @@ public class Main extends ApplicationAdapter {
     }
 
     private void input() {
+        if (currentState == GameState.TITLE) {
+            if (Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY) || Gdx.input.justTouched()) {
+                startStage(0);
+                skipFrame = true; // 시작에 쓴 키(W·클릭)가 바로 점프·사격이 되지 않게 한 프레임 쉰다
+            }
+            return;
+        }
         if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
             if (currentState == GameState.PLAYING) currentState = GameState.PAUSED;
             else if (currentState == GameState.PAUSED) currentState = GameState.PLAYING;
         }
         if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
-            world.reset();
-            currentState = GameState.PLAYING;
-            camManager.snapTo(camera, playerCenterX(), playerCenterY());
+            if (currentState == GameState.STAGE_CLEAR) {
+                startStage(world.stageIndex + 1);
+            } else if (currentState == GameState.ALL_CLEAR) { // 전체 클리어 후 처음부터 다시
+                world.deaths = 0;
+                playTime = 0;
+                startStage(0);
+            } else { // 플레이 중: 지금 스테이지를 처음부터
+                world.reset();
+                currentState = GameState.PLAYING;
+                snapCamera();
+            }
         }
     }
 
+    private void startStage(int index) {
+        world.loadStage(index);
+        currentState = GameState.PLAYING;
+        bannerTimer = 2.5f;
+        snapCamera();
+    }
+
+    private void snapCamera() {
+        camManager.snapTo(camera, playerCenterX(), playerCenterY(), world.stage.width, world.stage.height);
+    }
+
+    private boolean skipFrame;
+
     private void logic(float dt) {
         if (currentState == GameState.PAUSED) return; // 일시정지: 월드와 카메라 모두 멈춘다
+        if (skipFrame) {
+            skipFrame = false;
+            return;
+        }
 
+        bannerTimer -= dt;
         if (currentState == GameState.PLAYING) {
+            playTime += dt;
             viewport.unproject(mouse.set(Gdx.input.getX(), Gdx.input.getY(), 0)); // 화면 좌표 → 월드 좌표
             if (autoAim != null) mouse.set(world.shoulderX() + autoAim.x, world.shoulderY() + autoAim.y, 0);
             world.update(dt, mouse.x, mouse.y);
@@ -184,7 +246,7 @@ public class Main extends ApplicationAdapter {
             if (world.windowBrokeThisStep) camManager.startShake(0.8f, 18f);
             endingCheck();
         }
-        if (!overview) camManager.update(camera, playerCenterX(), playerCenterY(), dt);
+        if (!overview) camManager.update(camera, playerCenterX(), playerCenterY(), world.stage.width, world.stage.height, dt);
         updatePlayerAnim(dt);
         elapsed += dt;
     }
@@ -205,10 +267,10 @@ public class Main extends ApplicationAdapter {
         animTime += dt;
     }
 
-    /** 강의 10장 endingCheck: 클리어 순간 한 번만 상태를 바꾸고 연출을 시작한다. */
+    /** 강의 10장 endingCheck: 출구에 닿은 순간 한 번만 상태를 바꾸고 연출을 시작한다. 마지막 스테이지면 전체 클리어. */
     private void endingCheck() {
-        if (world.isGameClear() && currentState != GameState.CLEARED) {
-            currentState = GameState.CLEARED;
+        if (world.isGameClear() && currentState == GameState.PLAYING) {
+            currentState = world.isLastStage() ? GameState.ALL_CLEAR : GameState.STAGE_CLEAR;
             camManager.startShake(1.0f, 20f);
         }
     }
@@ -224,8 +286,7 @@ public class Main extends ApplicationAdapter {
     }
 
     private void draw() {
-        // 스테이지 분위기: 지금은 중력 단계(G 키)와 같이 바뀐다. 3스테이지 분리 시 스테이지 번호로 바꾼다.
-        Art.Look look = art.looks[world.gravityIndex];
+        Art.Look look = art.looks[world.stage.look]; // 스테이지별 배경·지형
         ScreenUtils.clear(look.clearColor);
         viewport.apply();
 
@@ -244,6 +305,9 @@ public class Main extends ApplicationAdapter {
         Rectangle f = world.flag;
         batch.setColor(Color.LIME); // 원본이 검은색이라 어두운 배경에서 보이도록 밝게 칠한다
         batch.draw(art.flag, f.x, f.y, f.width, f.height);
+        font.setColor(Color.LIME);
+        font.draw(batch, world.isLastStage() ? "ESCAPE POD" : "EXIT", f.x - 8, f.y + f.height + 18);
+        font.setColor(Color.WHITE);
         batch.setColor(Color.WHITE);
 
         for (Enemy e : world.enemies) {
@@ -402,7 +466,7 @@ public class Main extends ApplicationAdapter {
         Weapon w = world.weapon;
         String reload = world.reloadTimer > 0 ? "  [RELOADING]" : "";
         font.setColor(Color.WHITE);
-        font.draw(batch, String.format("Gravity: %.2fG  (G: change)", World.GRAVITY_SCALES[world.gravityIndex]), 16, VIEW_H - 16);
+        font.draw(batch, String.format("STAGE %d  %s   %.2fG", world.stageIndex + 1, world.stage.name, world.stage.gravityScale), 16, VIEW_H - 16);
         font.draw(batch, String.format("Weapon: %s  %d/%d%s", w.label, world.ammo[w.ordinal()], w.magazine, reload), 16, VIEW_H - 40);
         font.draw(batch, world.crouching ? "CROUCH (recoil x0.5)" : "", 16, VIEW_H - 88);
         drawOxygenBar(16, VIEW_H - 76);
@@ -422,8 +486,85 @@ public class Main extends ApplicationAdapter {
 
         font.setColor(Color.WHITE);
         if (currentState == GameState.PAUSED) font.draw(batch, "PAUSED - ESC to resume", VIEW_W / 2 - 80, VIEW_H / 2);
-        if (currentState == GameState.CLEARED) font.draw(batch, "CLEAR! - Enter to restart", VIEW_W / 2 - 85, VIEW_H / 2);
+        if (currentState == GameState.TITLE) drawTitle();
+        if (currentState == GameState.PLAYING && bannerTimer > 0) drawStageBanner();
+        if (currentState == GameState.STAGE_CLEAR) {
+            drawPanel();
+            drawCentered(String.format("STAGE %d CLEAR", world.stageIndex + 1), VIEW_H / 2 + 60, 3f, Color.LIME);
+            Stage next = Stage.get(world.stageIndex + 1);
+            drawCentered(String.format("NEXT: %s  (%.2fG)", next.name, next.gravityScale), VIEW_H / 2, 1.5f, Color.WHITE);
+            drawCentered("Press Enter", VIEW_H / 2 - 50, 1.2f, Color.LIGHT_GRAY);
+        }
+        if (currentState == GameState.ALL_CLEAR) {
+            drawPanel();
+            drawCentered("MISSION COMPLETE", VIEW_H / 2 + 100, 3.5f, Color.LIME);
+            drawCentered("You reached the escape pod. Returning to Earth.", VIEW_H / 2 + 30, 1.5f, Color.WHITE);
+            drawCentered(String.format("TIME %d:%02d    DEATHS %d", (int) playTime / 60, (int) playTime % 60, world.deaths),
+                VIEW_H / 2 - 30, 1.5f, Color.CYAN);
+            drawCentered("Press Enter to play again from Stage 1", VIEW_H / 2 - 90, 1.2f, Color.LIGHT_GRAY);
+        }
         batch.end();
+    }
+
+    /** 시작 화면: 제목, 줄거리 한 줄, 조작, 사격 방법. 아무 키나 누르면 1스테이지 시작. */
+    private void drawTitle() {
+        drawPanel();
+        drawCentered("MOON BASE ESCAPE", VIEW_H - 110, 3.5f, Color.ORANGE);
+        drawCentered("Monsters overran the lunar research base. Reach the escape pod and return to Earth.", VIEW_H - 170, 1.2f, Color.LIGHT_GRAY);
+
+        String[][] keys = {
+            {"A / D", "Move"}, {"W", "Jump"}, {"S", "Crouch (recoil x0.5)"}, {"R", "Reload"},
+            {"1 / 2 / Q", "Pistol / Shotgun / Switch"}, {"ESC", "Pause"}, {"Enter", "Restart stage"},
+        };
+        float y = VIEW_H - 240;
+        font.getData().setScale(1.3f);
+        for (String[] k : keys) {
+            font.setColor(Color.CYAN);
+            font.draw(batch, k[0], VIEW_W / 2 - 260, y);
+            font.setColor(Color.WHITE);
+            font.draw(batch, k[1], VIEW_W / 2 - 80, y);
+            y -= 30;
+        }
+        font.getData().setScale(1f);
+
+        y -= 20;
+        drawCentered("SHOOTING", y, 1.6f, Color.ORANGE);
+        drawCentered("Aim with the mouse, fire with the left button.", y - 40, 1.2f, Color.WHITE);
+        drawCentered("Recoil pushes you away from your aim: shoot DOWN with the shotgun to fly higher.", y - 70, 1.2f, Color.WHITE);
+        drawCentered("The lower the gravity, the higher you fly. Watch out - stray shots break windows.", y - 100, 1.2f, Color.WHITE);
+
+        float blink = 0.6f + 0.4f * MathUtils.sin(elapsed * 4f);
+        drawCentered("PRESS ANY KEY TO START", 70, 1.8f, new Color(1, 1, 1, blink));
+    }
+
+    /** 스테이지 시작 배너: 스테이지 이름과 그 스테이지의 규칙 한 줄. 끝날 때 서서히 사라진다. */
+    private void drawStageBanner() {
+        float alpha = Math.min(1f, bannerTimer);
+        String rule = world.stage.vacuum ? "VACUUM - oxygen drains everywhere. Use O2 stations."
+            : world.stageIndex == 0 ? "Artificial gravity online. Shoot down to recoil-jump."
+            : "Artificial gravity failing. Some windows are already broken.";
+        drawCentered(String.format("STAGE %d - %s", world.stageIndex + 1, world.stage.name), VIEW_H - 140, 2.5f,
+            new Color(1, 1, 1, alpha));
+        drawCentered(String.format("%.2fG   %s", world.stage.gravityScale, rule), VIEW_H - 190, 1.2f,
+            new Color(0.7f, 0.9f, 1f, alpha));
+    }
+
+    private void drawPanel() {
+        batch.setColor(0, 0, 0, 0.6f);
+        batch.draw(pixel, 0, 0, VIEW_W, VIEW_H);
+        batch.setColor(Color.WHITE);
+    }
+
+    private final GlyphLayout layout = new GlyphLayout();
+
+    /** 글자를 가운데 정렬로 그린다 (scale 배 크기). */
+    private void drawCentered(String text, float y, float scale, Color color) {
+        font.getData().setScale(scale);
+        font.setColor(color);
+        layout.setText(font, text);
+        font.draw(batch, layout, (VIEW_W - layout.width) / 2, y);
+        font.getData().setScale(1f);
+        font.setColor(Color.WHITE);
     }
 
     /** 산소 30% 미만: 화면 가장자리가 붉게 맥박친다. 적을수록 진하다. */

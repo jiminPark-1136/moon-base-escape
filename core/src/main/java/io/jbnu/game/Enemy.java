@@ -42,7 +42,7 @@ public class Enemy {
         return hp <= 0;
     }
 
-    public void update(float dt, float gravity, Array<Rectangle> blocks, Rectangle player) {
+    public void update(float dt, float gravity, Array<Rectangle> blocks, Rectangle player, float worldWidth) {
         hurtTimer = Math.max(0, hurtTimer - dt);
 
         // 시야: 같은 높이대, 바라보는 방향 앞쪽에 플레이어가 있으면 돌진
@@ -57,7 +57,7 @@ public class Enemy {
         body.vx = (facingRight ? speed : -speed) + knockback;
 
         body.applyGravity(gravity, dt);
-        boolean hitWall = body.moveX(dt, blocks, World.WORLD_WIDTH);
+        boolean hitWall = body.moveX(dt, blocks, worldWidth);
         body.moveY(dt, blocks);
 
         // 순찰 중에는 벽이나 발판 끝에서 돌아선다. 돌진 중에는 멈추지 않아 구덩이에 빠질 수 있다.

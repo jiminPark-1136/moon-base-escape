@@ -28,17 +28,17 @@ public class CameraManager {
         return shakeIntensity * (1f - shakeTimer / shakeDuration);
     }
 
-    public void snapTo(OrthographicCamera camera, float x, float y) {
-        base.set(clampX(camera, x), clampY(camera, y));
+    public void snapTo(OrthographicCamera camera, float x, float y, float worldW, float worldH) {
+        base.set(clampX(camera, x, worldW), clampY(camera, y, worldH));
         camera.position.set(base, 0);
         camera.update();
     }
 
-    public void update(OrthographicCamera camera, float targetX, float targetY, float delta) {
+    public void update(OrthographicCamera camera, float targetX, float targetY, float worldW, float worldH, float delta) {
         // 추적: 강의의 X축 clamp에 Y축을 더하고, 순간이동 대신 부드럽게 따라간다
         float t = Math.min(1f, FOLLOW_SPEED * delta);
-        base.x += (clampX(camera, targetX) - base.x) * t;
-        base.y += (clampY(camera, targetY) - base.y) * t;
+        base.x += (clampX(camera, targetX, worldW) - base.x) * t;
+        base.y += (clampY(camera, targetY, worldH) - base.y) * t;
 
         float offsetX = 0, offsetY = 0;
         if (shakeTimer < shakeDuration) {
@@ -51,13 +51,13 @@ public class CameraManager {
         camera.update();
     }
 
-    private static float clampX(OrthographicCamera camera, float x) {
+    private static float clampX(OrthographicCamera camera, float x, float worldW) {
         float half = camera.viewportWidth / 2;
-        return MathUtils.clamp(x, half, World.WORLD_WIDTH - half);
+        return MathUtils.clamp(x, half, worldW - half);
     }
 
-    private static float clampY(OrthographicCamera camera, float y) {
+    private static float clampY(OrthographicCamera camera, float y, float worldH) {
         float half = camera.viewportHeight / 2;
-        return MathUtils.clamp(y, half, World.WORLD_HEIGHT - half);
+        return MathUtils.clamp(y, half, worldH - half);
     }
 }

@@ -1,0 +1,146 @@
+package io.jbnu.game;
+
+import com.badlogic.gdx.math.Rectangle;
+
+/**
+ * 스테이지 데이터. World는 이 값을 읽어 맵을 만들고, 죽으면 같은 스테이지를 처음부터 다시 만든다.
+ * 모든 좌표는 월드 단위(바닥 블록 윗면 y = 64 기준). 높이·거리는 그 스테이지 중력의 점프 수치에 맞췄다.
+ * 점프 높이는 스테이지마다 정하고 점프 속도를 역산한다 (v = √(2gh)). 샷건 반동은 그대로 물리식이라
+ * 중력이 약할수록 반동 점프의 비중이 커진다.
+ *
+ * | 중력 | 점프 높이 | 점프 + 샷건 | 제자리 점프로 건너는 거리 |
+ * | 1.0G  | 약 124 | 약 188 | 약 153 |
+ * | 0.58G | 약 170 | 약 290 | 약 235 |
+ * | 0.16G | 약 260 | 약 710 | 약 550 |
+ */
+public class Stage {
+    public static final int COUNT = 3;
+
+    public final String name;
+    /** 지구 중력(강의 GRAVITY 1700) 대비 배율 */
+    public final float gravityScale;
+    /** 점프 높이 (월드 단위). 점프 속도는 이 높이와 중력으로 계산한다. */
+    public final float jumpHeight;
+    /** Art.looks 번호 (배경·지형) */
+    public final int look;
+    /** 스테이지 전체가 진공인지 (기지 밖) */
+    public final boolean vacuum;
+    public final float width, height, startX, startY;
+    public final Rectangle exit;
+    /** {x, y, w, h} */
+    public final float[][] blocks, stations;
+    /** {유리 x, y, w, h, 방 x, y, w, h, 처음 내구도} — 내구도 0이면 처음부터 깨진 창문 */
+    public final float[][] windows;
+    /** {x, y, 오른쪽을 보면 1} */
+    public final float[][] enemies;
+
+    private Stage(String name, float gravityScale, float jumpHeight, int look, boolean vacuum, float width, float height,
+                  float startX, float startY, Rectangle exit,
+                  float[][] blocks, float[][] stations, float[][] windows, float[][] enemies) {
+        this.name = name;
+        this.gravityScale = gravityScale;
+        this.jumpHeight = jumpHeight;
+        this.look = look;
+        this.vacuum = vacuum;
+        this.width = width;
+        this.height = height;
+        this.startX = startX;
+        this.startY = startY;
+        this.exit = exit;
+        this.blocks = blocks;
+        this.stations = stations;
+        this.windows = windows;
+        this.enemies = enemies;
+    }
+
+    public static Stage get(int index) {
+        switch (index) {
+            case 0: return researchLab();
+            case 1: return collapsedSector();
+            default: return lunarSurface();
+        }
+    }
+
+    /** 1스테이지: 연구동 (1G 인공중력). 천장 656, 화면 높이와 같아 카메라는 가로로만 움직인다. */
+    private static Stage researchLab() {
+        return new Stage("RESEARCH LAB", 1f, 124, 0, false, 4800, 720, 80, 64,
+            new Rectangle(4700, 64, 48, 56),
+            new float[][] {
+                {0, 0, 1760, 64}, {1872, 0, 2928, 64},  // 바닥 — 사이 112px 구덩이 (떨어지면 처음부터)
+                {0, 656, 4800, 64},                      // 천장
+                {520, 64, 64, 64}, {650, 208, 250, 32},  // A. 시작 연구실: 상자 → 선반
+                {1100, 64, 96, 96}, {1300, 224, 192, 32}, {1560, 160, 128, 32}, // B. 계단 실험실
+                {1500, 328, 700, 32},                    // 위층 통로: 구덩이 위를 건너는 갈림길
+                {2400, 64, 96, 160},                     // D. 샷건 벽: 점프만으로는 못 넘음
+                {2800, 116, 256, 540},                   // F. 앉기 통로: 바닥과 52px 틈
+                {3150, 132, 128, 32}, {3330, 232, 128, 32}, {3510, 332, 128, 32}, // G. 계단
+                {3700, 432, 800, 32},                    // G. 위쪽 통로 (아래쪽 방과 갈림)
+            },
+            new float[][] {{2300, 64, 40, 64}, {3080, 64, 40, 64}, {4560, 64, 40, 64}},
+            new float[][] {
+                // 창문은 적이 다니는 바닥 높이 → 적을 쏘다 빗나간 탄·샷건 펠릿이 창문을 깬다
+                {2600, 80, 128, 96, 2496, 64, 304, 592, Window.MAX_HP},
+                {1330, 80, 128, 96, 900, 64, 860, 592, Window.MAX_HP},
+                {4040, 80, 160, 96, 3700, 64, 800, 368, Window.MAX_HP},
+            },
+            new float[][] {
+                {760, 64, 0}, {700, 240, 1}, {1250, 64, 1}, {1450, 64, 0}, {1350, 256, 1},
+                {1650, 360, 0}, {2000, 360, 1}, {2000, 64, 1}, {2580, 64, 0}, {2700, 64, 1},
+                {3250, 64, 1}, {3900, 464, 0}, {4300, 464, 1}, {3950, 64, 0}, {4100, 64, 1}, {4300, 64, 0},
+            });
+    }
+
+    /**
+     * 2스테이지: 붕괴 구역 (0.58G, 인공중력 고장). 처음부터 깨진 창문이 있는 감압 복도를 지나야 하고,
+     * 넓은 구덩이와 높은 벽은 낮아진 중력과 샷건 반동으로 넘는다.
+     */
+    private static Stage collapsedSector() {
+        return new Stage("COLLAPSED SECTOR", 0.58f, 170, 1, false, 4800, 720, 80, 64,
+            new Rectangle(4700, 64, 48, 56),
+            new float[][] {
+                {0, 0, 800, 64},                         // A. 시작 구역
+                {1000, 0, 2800, 64},                     // 200px 구덩이 (0.58G 점프로 건넘, 최대 약 235) 뒤 바닥
+                {0, 656, 4800, 64},                      // 천장
+                {450, 178, 200, 32},                     // A. 발판 (윗면 210)
+                {1760, 64, 64, 256},                     // C. 감압 복도 끝 칸막이 (높이 256: 점프 170으로는 못 넘고 샷건 필요)
+                {2100, 182, 128, 32}, {2300, 332, 128, 32}, // D. 수직 통로: 150씩 올라감
+                {2500, 332, 400, 32},                    // D. 높은 통로 (윗면 364)
+                {2900, 64, 96, 436},                     // D. 격벽 (윗면 500): 높은 통로에서만 넘어감
+                {3800, 0, 200, 64}, {4200, 0, 200, 64}, {4600, 0, 200, 64}, // F. 끊어진 바닥 (200px 구덩이 2개)
+                {4000, 180, 200, 32},                    // F. 구덩이 위 발판 (윗면 212)
+            },
+            new float[][] {{700, 64, 40, 64}, {2000, 64, 40, 64}, {3700, 64, 40, 64}},
+            new float[][] {
+                {1300, 80, 128, 96, 1000, 64, 760, 592, 0},          // C. 처음부터 깨진 창문: 감압 복도
+                {3300, 80, 128, 96, 2996, 64, 804, 592, Window.MAX_HP}, // E. 적 무리 뒤 창문
+            },
+            new float[][] {
+                {600, 64, 0}, {500, 210, 1},
+                {2150, 64, 1}, {2550, 364, 0}, {2750, 364, 1},
+                {3100, 64, 1}, {3250, 64, 0}, {3450, 64, 1}, {3600, 64, 0},
+                {4050, 212, 1}, {4250, 64, 0}, {4650, 64, 1},
+            });
+    }
+
+    /**
+     * 3스테이지: 달 표면 (0.16G, 기지 밖 = 전체 진공). 맵이 높아 카메라가 위아래로도 따라간다.
+     * 산소가 계속 줄어 스테이션을 이어 가며 이동해야 하고, 절벽은 점프 + 샷건 반동으로 오른다.
+     */
+    private static Stage lunarSurface() {
+        return new Stage("LUNAR SURFACE", 0.16f, 260, 2, true, 4800, 1600, 80, 64,
+            new Rectangle(4400, 1164, 64, 72),           // 탈출포드: 마지막 메사 꼭대기
+            new float[][] {
+                {0, 0, 900, 64},                         // A. 기지 출구 앞
+                {1350, 0, 650, 64},                      // B. 450px 크레이터 건너편 (점프로 최대 약 550)
+                {2000, 0, 1000, 664},                    // C. 고원 (높이 600): 점프(260)로는 못 오르고 샷건 필요 (약 710)
+                {3000, 0, 600, 64},                      // D. 크레이터 바닥 (고원에서 뛰어내림)
+                {3700, 0, 200, 364}, {3950, 0, 200, 764}, {4300, 0, 300, 1164}, // E. 계단식 메사 (300·400·400씩, 전부 샷건 필요)
+            },
+            new float[][] {{300, 64, 40, 64}, {1500, 64, 40, 64}, {2500, 664, 40, 64}, {3300, 64, 40, 64}, {4000, 764, 40, 64}},
+            new float[][] {},
+            new float[][] {
+                {600, 64, 0}, {1700, 64, 1}, {2300, 664, 1}, {2700, 664, 0},
+                {3100, 64, 1}, {3300, 64, 0}, {3500, 64, 1}, {3750, 364, 0}, {4520, 1164, 0},
+            });
+    }
+}
