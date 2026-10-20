@@ -11,7 +11,7 @@ public class World {
     public static final float WORLD_WIDTH = 3200;
     public static final float WORLD_HEIGHT = 1400;
 
-    private static final float MOVE_SPEED = 260;
+    private static final float MOVE_SPEED = 200; // 강의 260에서 낮춤 (플레이테스트 피드백)
     private static final float JUMP_SPEED = 650;
     /** 강의의 GRAVITY 1700을 지구 중력 1G로 둔다. */
     private static final float EARTH_GRAVITY = 1700;
@@ -20,7 +20,7 @@ public class World {
 
     private static final float START_X = 80, START_Y = 60;
     /** 히트박스. 32px 트루퍼를 2배로 그렸을 때 몸통에 맞춘 크기. */
-    private static final float PLAYER_W = 32, STAND_H = 44, CROUCH_H = 28;
+    private static final float PLAYER_W = 36, STAND_H = 60, CROUCH_H = 44;
     private static final float CROUCH_RECOIL = 0.5f;
     /** 반동으로 생긴 수평 속도가 줄어드는 비율(1/초). 땅에서는 빨리, 공중에서는 천천히 멈춘다. */
     private static final float KICK_FRICTION_GROUND = 10f, KICK_FRICTION_AIR = 1.5f;

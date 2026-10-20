@@ -22,8 +22,9 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 import java.util.zip.Deflater;
 
 /**
- * [스냅샷 v0.1 — 첫 프로토타입 재현]
- * 강의 Project2의 이미지(player/block/flag)를 그대로 쓰고, 총은 마우스 방향으로 회전하는 막대로 그린다.
+ * [스냅샷 v0.2 — 첫 CC0 스프라이트 적용 재현]
+ * drakzlin 병사 애니메이션, Eris SF 타일, 도시 배경. 맵은 아직 강의 블록 배치 + 반동 테스트 탑, 총은 회전 막대.
+ * (이 단계에서 발견한 문제: 깃발이 검은색이라 배경에 묻힘, 배경이 도시라 달 기지와 안 맞음 → 이후 버전에서 수정)
  * 레포트용 스크린샷을 위해 개발 일지를 바탕으로 나중에 재현한 버전이다.
  */
 public class Main extends ApplicationAdapter {
@@ -33,7 +34,10 @@ public class Main extends ApplicationAdapter {
 
     private SpriteBatch batch;
     private BitmapFont font;
-    private Texture playerTexture, blockTexture, flagTexture, pixelTexture;
+    private Art art;
+    private com.badlogic.gdx.graphics.g2d.Animation<TextureRegion> playerAnim;
+    private float animTime;
+    private Texture pixelTexture;
     private TextureRegion pixel;
     private Cursor hiddenCursor;
     private OrthographicCamera camera;
@@ -49,9 +53,8 @@ public class Main extends ApplicationAdapter {
     public void create() {
         batch = new SpriteBatch();
         font = new BitmapFont();
-        playerTexture = new Texture(Gdx.files.internal("player.png"));
-        blockTexture = new Texture(Gdx.files.internal("block.png"));
-        flagTexture = new Texture(Gdx.files.internal("flag.png"));
+        art = new Art();
+        playerAnim = art.idle;
 
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
@@ -108,6 +111,17 @@ public class Main extends ApplicationAdapter {
             }
         }
         camManager.update(camera, playerCenterX(), playerCenterY(), dt);
+        Body pb = world.player;
+        com.badlogic.gdx.graphics.g2d.Animation<TextureRegion> next;
+        if (!pb.grounded) next = art.jump;
+        else if (world.crouching) next = art.crouch;
+        else if (Math.abs(pb.vx) > 10) next = art.run;
+        else next = art.idle;
+        if (next != playerAnim) {
+            playerAnim = next;
+            animTime = 0;
+        }
+        animTime += dt;
     }
 
     private float playerCenterX() {
@@ -123,15 +137,25 @@ public class Main extends ApplicationAdapter {
     private void draw() {
         ScreenUtils.clear(0.06f, 0.06f, 0.10f, 1f);
         viewport.apply();
+        batch.setProjectionMatrix(hudMatrix);
+        batch.begin();
+        batch.setColor(0.45f, 0.45f, 0.55f, 1f);
+        batch.draw(art.background, 0, 0, VIEW_W, VIEW_H);
+        batch.setColor(Color.WHITE);
+        batch.end();
+
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        for (Rectangle block : world.blocks) batch.draw(blockTexture, block.x, block.y, block.width, block.height);
+        for (Rectangle block : world.blocks) drawBlock(block);
         Rectangle f = world.flag;
-        batch.draw(flagTexture, f.x, f.y, f.width, f.height);
+        batch.draw(art.flag, f.x, f.y, f.width, f.height);
 
         Rectangle p = world.player.bounds;
-        if (world.facingRight) batch.draw(playerTexture, p.x, p.y, p.width, p.height);
-        else batch.draw(playerTexture, p.x + p.width, p.y, -p.width, p.height);
+        TextureRegion frame = playerAnim.getKeyFrame(animTime);
+        float size = frame.getRegionWidth() * Art.SCALE;
+        float drawX = p.x + p.width / 2 - size / 2;
+        if (world.facingRight) batch.draw(frame, drawX, p.y, size, size);
+        else batch.draw(frame, drawX + size, p.y, -size, size);
 
         // 총: 총구에서 조준점 방향으로 회전한 막대
         float mx = world.muzzleX(), my = world.muzzleY();
@@ -160,6 +184,19 @@ public class Main extends ApplicationAdapter {
         if (currentState == GameState.PAUSED) font.draw(batch, "PAUSED - ESC to resume", VIEW_W / 2 - 80, VIEW_H / 2);
         if (currentState == GameState.CLEARED) font.draw(batch, "CLEAR! - Enter to restart", VIEW_W / 2 - 85, VIEW_H / 2);
         batch.end();
+    }
+
+    private void drawBlock(Rectangle b) {
+        final float t = 32;
+        for (float x = b.x; x < b.x + b.width; x += t) {
+            float w = Math.min(t, b.x + b.width - x);
+            float topH = Math.min(t, b.height);
+            for (float y = b.y; y < b.y + b.height - topH; y += t) {
+                float h = Math.min(t, b.y + b.height - topH - y);
+                batch.draw(art.tileBody, x, y, w, h);
+            }
+            batch.draw(art.tileTop, x, b.y + b.height - topH, w, topH);
+        }
     }
 
     private void drawCrosshair(float x, float y) {
@@ -207,9 +244,7 @@ public class Main extends ApplicationAdapter {
     public void dispose() {
         batch.dispose();
         font.dispose();
-        playerTexture.dispose();
-        blockTexture.dispose();
-        flagTexture.dispose();
+        art.dispose();
         pixelTexture.dispose();
         hiddenCursor.dispose();
     }
