@@ -15,8 +15,7 @@
 ### 실행
 
 - **윈도우**: 압축을 풀고 `MoonBaseEscape.exe` 실행. "Windows의 PC 보호" 창이 뜨면 **추가 정보 → 실행**
-- **맥**: 압축을 풀고 앱을 **우클릭 → 열기** (그냥 더블클릭하면 "확인되지 않은 개발자"라고 막힘). 그래도 막히면 터미널에서:
-  `xattr -dr com.apple.quarantine ~/Downloads/MoonBaseEscape.app`
+- **맥**: 압축을 풀면 나오는 폴더 안의 `MoonBaseEscape.app`을 **우클릭 → 열기** (그냥 더블클릭하면 "확인되지 않은 개발자"라고 막힘). 그래도 막히면 터미널에 `xattr -dr com.apple.quarantine ` 까지 친 뒤 앱을 터미널 창으로 끌어다 놓고 Enter
 - **마우스 필수** (조준). 노트북 터치패드로는 어렵습니다.
 
 ### 조작
