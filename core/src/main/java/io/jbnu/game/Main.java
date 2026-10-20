@@ -12,6 +12,7 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.GlyphLayout;
+import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
@@ -40,6 +41,7 @@ public class Main extends ApplicationAdapter {
 
     private SpriteBatch batch;
     private BitmapFont font;
+    private FreeTypeFontGenerator fontGenerator;
     private Art art;
     private Animation<TextureRegion> playerAnim;
     private float animTime;
@@ -62,7 +64,12 @@ public class Main extends ApplicationAdapter {
     @Override
     public void create() {
         batch = new SpriteBatch();
-        font = new BitmapFont();
+        // 한글 글꼴: 갈무리11 (12px 기준 픽셀 글꼴)을 정확히 2배인 24px로 만든다. 글자는 처음 쓰일 때 만들어진다(incremental).
+        fontGenerator = new FreeTypeFontGenerator(Gdx.files.internal("fonts/Galmuri11.ttf"));
+        FreeTypeFontGenerator.FreeTypeFontParameter fp = new FreeTypeFontGenerator.FreeTypeFontParameter();
+        fp.size = 24;
+        fp.incremental = true;
+        font = fontGenerator.generateFont(fp);
         art = new Art();
         playerAnim = art.idle;
 
@@ -306,7 +313,7 @@ public class Main extends ApplicationAdapter {
         batch.setColor(Color.LIME); // 원본이 검은색이라 어두운 배경에서 보이도록 밝게 칠한다
         batch.draw(art.flag, f.x, f.y, f.width, f.height);
         font.setColor(Color.LIME);
-        font.draw(batch, world.isLastStage() ? "ESCAPE POD" : "EXIT", f.x - 8, f.y + f.height + 18);
+        font.draw(batch, world.isLastStage() ? "탈출포드" : "출구", f.x - 8, f.y + f.height + 28);
         font.setColor(Color.WHITE);
         batch.setColor(Color.WHITE);
 
@@ -464,44 +471,51 @@ public class Main extends ApplicationAdapter {
         batch.begin();
         drawLowOxygenVignette();
         Weapon w = world.weapon;
-        String reload = world.reloadTimer > 0 ? "  [RELOADING]" : "";
+        String reload = world.reloadTimer > 0 ? "  [재장전 중]" : "";
         font.setColor(Color.WHITE);
-        font.draw(batch, String.format("STAGE %d  %s   %.2fG", world.stageIndex + 1, world.stage.name, world.stage.gravityScale), 16, VIEW_H - 16);
-        font.draw(batch, String.format("Weapon: %s  %d/%d%s", w.label, world.ammo[w.ordinal()], w.magazine, reload), 16, VIEW_H - 40);
-        font.draw(batch, world.crouching ? "CROUCH (recoil x0.5)" : "", 16, VIEW_H - 88);
-        drawOxygenBar(16, VIEW_H - 76);
+        font.draw(batch, String.format("%d스테이지  %s   중력 %.2fG", world.stageIndex + 1, world.stage.name, world.stage.gravityScale), 16, VIEW_H - 16);
+        // 상태 표시: 왼쪽 아래 (아래에서부터 산소 → 무기 → 상태). 바탕은 글자 길이만큼만 깐다 → 캐릭터를 덜 가린다
+        String weaponText = String.format("무기: %s  %d/%d%s", w.label, world.ammo[w.ordinal()], w.magazine, reload);
+        String status = world.atStation ? "산소 충전 / 우주복 수리 중"
+            : world.inVacuum ? "진공" : world.crouching ? "앉기 (반동 절반)" : "";
+        String leakText = world.leak > 0 ? "누출 x" + world.leak : "";
+        float panelW = Math.max(widthOf(weaponText), Math.max(widthOf(status), 270 + widthOf(leakText))) + 20;
+        batch.setColor(0, 0, 0, 0.45f);
+        batch.draw(pixel, 6, 6, panelW, status.isEmpty() ? 80 : 112);
+        batch.setColor(Color.WHITE);
+        drawOxygenBar(16, 20);
+        font.setColor(Color.WHITE);
+        font.draw(batch, weaponText, 16, 72);
+        font.setColor(world.atStation ? Color.CYAN : world.inVacuum ? Color.ORANGE : Color.LIGHT_GRAY);
+        font.draw(batch, status, 16, 104);
         if (world.leak > 0) {
             font.setColor(Color.RED);
-            font.draw(batch, "SUIT LEAK x" + world.leak, 270, VIEW_H - 64);
+            font.draw(batch, leakText, 280, 38);
         }
-        if (world.atStation) {
-            font.setColor(Color.CYAN);
-            font.draw(batch, "O2 REFILL / SUIT REPAIRED", 16, VIEW_H - 108);
-        } else if (world.inVacuum) {
-            font.setColor(Color.ORANGE);
-            font.draw(batch, "VACUUM", 16, VIEW_H - 108);
-        }
-        font.setColor(Color.GRAY);
-        font.draw(batch, "A/D move  W jump  S crouch  Mouse aim  LMB fire  R reload  1/2/Q weapon  ESC pause  Enter restart", 16, 24);
 
         font.setColor(Color.WHITE);
-        if (currentState == GameState.PAUSED) font.draw(batch, "PAUSED - ESC to resume", VIEW_W / 2 - 80, VIEW_H / 2);
+        if (currentState == GameState.PAUSED) {
+            drawPanel();
+            drawCentered("일시정지", VIEW_H - 120, 2.5f, Color.WHITE);
+            drawControls(VIEW_H - 260);
+            drawCentered("ESC: 계속하기", 120, 1f, Color.LIGHT_GRAY);
+        }
         if (currentState == GameState.TITLE) drawTitle();
         if (currentState == GameState.PLAYING && bannerTimer > 0) drawStageBanner();
         if (currentState == GameState.STAGE_CLEAR) {
             drawPanel();
-            drawCentered(String.format("STAGE %d CLEAR", world.stageIndex + 1), VIEW_H / 2 + 60, 3f, Color.LIME);
+            drawCentered(String.format("%d스테이지 클리어", world.stageIndex + 1), VIEW_H / 2 + 80, 3f, Color.LIME);
             Stage next = Stage.get(world.stageIndex + 1);
-            drawCentered(String.format("NEXT: %s  (%.2fG)", next.name, next.gravityScale), VIEW_H / 2, 1.5f, Color.WHITE);
-            drawCentered("Press Enter", VIEW_H / 2 - 50, 1.2f, Color.LIGHT_GRAY);
+            drawCentered(String.format("다음: %s  (중력 %.2fG)", next.name, next.gravityScale), VIEW_H / 2 - 30, 1.5f, Color.WHITE);
+            drawCentered("Enter를 누르세요", VIEW_H / 2 - 90, 1f, Color.LIGHT_GRAY);
         }
         if (currentState == GameState.ALL_CLEAR) {
             drawPanel();
-            drawCentered("MISSION COMPLETE", VIEW_H / 2 + 100, 3.5f, Color.LIME);
-            drawCentered("You reached the escape pod. Returning to Earth.", VIEW_H / 2 + 30, 1.5f, Color.WHITE);
-            drawCentered(String.format("TIME %d:%02d    DEATHS %d", (int) playTime / 60, (int) playTime % 60, world.deaths),
-                VIEW_H / 2 - 30, 1.5f, Color.CYAN);
-            drawCentered("Press Enter to play again from Stage 1", VIEW_H / 2 - 90, 1.2f, Color.LIGHT_GRAY);
+            drawCentered("탈출 성공", VIEW_H / 2 + 140, 3.5f, Color.LIME);
+            drawCentered("탈출포드에 도착했다. 지구로 돌아간다.", VIEW_H / 2 + 20, 1.5f, Color.WHITE);
+            drawCentered(String.format("시간 %d:%02d    사망 %d회", (int) playTime / 60, (int) playTime % 60, world.deaths),
+                VIEW_H / 2 - 40, 1.5f, Color.CYAN);
+            drawCentered("Enter: 1스테이지부터 다시", VIEW_H / 2 - 110, 1f, Color.LIGHT_GRAY);
         }
         batch.end();
     }
@@ -509,43 +523,46 @@ public class Main extends ApplicationAdapter {
     /** 시작 화면: 제목, 줄거리 한 줄, 조작, 사격 방법. 아무 키나 누르면 1스테이지 시작. */
     private void drawTitle() {
         drawPanel();
-        drawCentered("MOON BASE ESCAPE", VIEW_H - 110, 3.5f, Color.ORANGE);
-        drawCentered("Monsters overran the lunar research base. Reach the escape pod and return to Earth.", VIEW_H - 170, 1.2f, Color.LIGHT_GRAY);
+        drawCentered("달 기지 탈출", VIEW_H - 50, 3.5f, Color.ORANGE);
+        drawCentered("괴물이 점령한 달 연구기지. 탈출포드까지 가서 지구로 돌아가자.", VIEW_H - 170, 1f, Color.LIGHT_GRAY);
 
+        float y = drawControls(VIEW_H - 240);
+
+        y -= 20;
+        drawCentered("사격", y, 1.5f, Color.ORANGE);
+        drawCentered("마우스로 조준하고 왼쪽 버튼으로 쏜다.", y - 45, 1f, Color.WHITE);
+        drawCentered("반동은 조준 반대쪽으로 민다: 샷건으로 아래를 쏘면 높이 뜬다.", y - 75, 1f, Color.WHITE);
+        drawCentered("중력이 약할수록 더 높이 뜬다. 빗나간 탄은 창문을 깨니 조심!", y - 105, 1f, Color.WHITE);
+
+        float blink = 0.6f + 0.4f * MathUtils.sin(elapsed * 4f);
+        drawCentered("아무 키나 눌러 시작", 60, 1.5f, new Color(1, 1, 1, blink));
+    }
+
+    /** 조작표 (시작 화면·일시정지 화면 공용). 다 그린 뒤의 y를 돌려준다. */
+    private float drawControls(float y) {
         String[][] keys = {
-            {"A / D", "Move"}, {"W", "Jump"}, {"S", "Crouch (recoil x0.5)"}, {"R", "Reload"},
-            {"1 / 2 / Q", "Pistol / Shotgun / Switch"}, {"ESC", "Pause"}, {"Enter", "Restart stage"},
+            {"A / D", "이동"}, {"W", "점프"}, {"S", "앉기 (반동 절반)"}, {"R", "재장전"},
+            {"1 / 2 / Q", "권총 / 샷건 / 바꾸기"}, {"ESC", "일시정지"}, {"Enter", "스테이지 다시 시작"},
         };
-        float y = VIEW_H - 240;
-        font.getData().setScale(1.3f);
         for (String[] k : keys) {
             font.setColor(Color.CYAN);
             font.draw(batch, k[0], VIEW_W / 2 - 260, y);
             font.setColor(Color.WHITE);
             font.draw(batch, k[1], VIEW_W / 2 - 80, y);
-            y -= 30;
+            y -= 32;
         }
-        font.getData().setScale(1f);
-
-        y -= 20;
-        drawCentered("SHOOTING", y, 1.6f, Color.ORANGE);
-        drawCentered("Aim with the mouse, fire with the left button.", y - 40, 1.2f, Color.WHITE);
-        drawCentered("Recoil pushes you away from your aim: shoot DOWN with the shotgun to fly higher.", y - 70, 1.2f, Color.WHITE);
-        drawCentered("The lower the gravity, the higher you fly. Watch out - stray shots break windows.", y - 100, 1.2f, Color.WHITE);
-
-        float blink = 0.6f + 0.4f * MathUtils.sin(elapsed * 4f);
-        drawCentered("PRESS ANY KEY TO START", 70, 1.8f, new Color(1, 1, 1, blink));
+        return y;
     }
 
     /** 스테이지 시작 배너: 스테이지 이름과 그 스테이지의 규칙 한 줄. 끝날 때 서서히 사라진다. */
     private void drawStageBanner() {
         float alpha = Math.min(1f, bannerTimer);
-        String rule = world.stage.vacuum ? "VACUUM - oxygen drains everywhere. Use O2 stations."
-            : world.stageIndex == 0 ? "Artificial gravity online. Shoot down to recoil-jump."
-            : "Artificial gravity failing. Some windows are already broken.";
-        drawCentered(String.format("STAGE %d - %s", world.stageIndex + 1, world.stage.name), VIEW_H - 140, 2.5f,
+        String rule = world.stage.vacuum ? "진공 - 어디서나 산소가 줄어든다. 산소 스테이션을 이어서 쓰자."
+            : world.stageIndex == 0 ? "인공중력 정상. 샷건으로 아래를 쏘면 반동으로 높이 뛴다."
+            : "인공중력 고장. 이미 깨진 창문이 있다.";
+        drawCentered(String.format("%d스테이지 - %s", world.stageIndex + 1, world.stage.name), VIEW_H - 140, 2.5f,
             new Color(1, 1, 1, alpha));
-        drawCentered(String.format("%.2fG   %s", world.stage.gravityScale, rule), VIEW_H - 190, 1.2f,
+        drawCentered(String.format("중력 %.2fG   %s", world.stage.gravityScale, rule), VIEW_H - 210, 1f,
             new Color(0.7f, 0.9f, 1f, alpha));
     }
 
@@ -556,6 +573,11 @@ public class Main extends ApplicationAdapter {
     }
 
     private final GlyphLayout layout = new GlyphLayout();
+
+    private float widthOf(String text) {
+        layout.setText(font, text);
+        return layout.width;
+    }
 
     /** 글자를 가운데 정렬로 그린다 (scale 배 크기). */
     private void drawCentered(String text, float y, float scale, Color color) {
@@ -629,7 +651,7 @@ public class Main extends ApplicationAdapter {
         batch.draw(pixel, s.x + 6, s.y + 8, s.width - 12, s.height - 24);
         batch.setColor(Color.WHITE);
         font.setColor(Color.CYAN);
-        font.draw(batch, "O2", s.x + 8, s.y + s.height + 18);
+        font.draw(batch, "O2", s.x + 4, s.y + s.height + 28);
         font.setColor(Color.WHITE);
     }
 
@@ -641,7 +663,7 @@ public class Main extends ApplicationAdapter {
         batch.setColor(ratio < 0.3f ? Color.RED : Color.CYAN);
         batch.draw(pixel, x, y, w * ratio, h);
         batch.setColor(Color.WHITE);
-        font.draw(batch, "O2", x + w + 8, y + h);
+        font.draw(batch, "산소", x + w + 8, y + h + 6);
     }
 
     @Override
@@ -653,6 +675,7 @@ public class Main extends ApplicationAdapter {
     public void dispose() {
         batch.dispose();
         font.dispose();
+        fontGenerator.dispose();
         art.dispose();
         pixelTexture.dispose();
         hiddenCursor.dispose();

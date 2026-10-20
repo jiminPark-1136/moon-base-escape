@@ -63,7 +63,7 @@ public class Stage {
 
     /** 1스테이지: 연구동 (1G 인공중력). 천장 656, 화면 높이와 같아 카메라는 가로로만 움직인다. */
     private static Stage researchLab() {
-        return new Stage("RESEARCH LAB", 1f, 124, 0, false, 4800, 720, 80, 64,
+        return new Stage("연구동", 1f, 124, 0, false, 4800, 720, 400, 64,
             new Rectangle(4700, 64, 48, 56),
             new float[][] {
                 {0, 0, 1760, 64}, {1872, 0, 2928, 64},  // 바닥 — 사이 112px 구덩이 (떨어지면 처음부터)
@@ -95,7 +95,7 @@ public class Stage {
      * 넓은 구덩이와 높은 벽은 낮아진 중력과 샷건 반동으로 넘는다.
      */
     private static Stage collapsedSector() {
-        return new Stage("COLLAPSED SECTOR", 0.58f, 170, 1, false, 4800, 720, 80, 64,
+        return new Stage("붕괴 구역", 0.58f, 170, 1, false, 4800, 720, 400, 64,
             new Rectangle(4700, 64, 48, 56),
             new float[][] {
                 {0, 0, 800, 64},                         // A. 시작 구역
@@ -127,7 +127,7 @@ public class Stage {
      * 산소가 계속 줄어 스테이션을 이어 가며 이동해야 하고, 절벽은 점프 + 샷건 반동으로 오른다.
      */
     private static Stage lunarSurface() {
-        return new Stage("LUNAR SURFACE", 0.16f, 260, 2, true, 4800, 1600, 80, 64,
+        return new Stage("달 표면", 0.16f, 260, 2, true, 4800, 1600, 400, 64,
             new Rectangle(4400, 1164, 64, 72),           // 탈출포드: 마지막 메사 꼭대기
             new float[][] {
                 {0, 0, 900, 64},                         // A. 기지 출구 앞
@@ -139,7 +139,7 @@ public class Stage {
             new float[][] {{300, 64, 40, 64}, {1500, 64, 40, 64}, {2500, 664, 40, 64}, {3300, 64, 40, 64}, {4000, 764, 40, 64}},
             new float[][] {},
             new float[][] {
-                {600, 64, 0}, {1700, 64, 1}, {2300, 664, 1}, {2700, 664, 0},
+                {800, 64, 0}, {1700, 64, 1}, {2300, 664, 1}, {2700, 664, 0},
                 {3100, 64, 1}, {3300, 64, 0}, {3500, 64, 1}, {3750, 364, 0}, {4520, 1164, 0},
             });
     }

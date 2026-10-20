@@ -25,7 +25,7 @@
 | 마우스 / 좌클릭 | 조준 / 사격 |
 | R | 재장전 |
 | 1 / 2 / Q | 권총 / 샷건 / 전환 |
-| ESC | 일시정지 |
+| ESC | 일시정지 (조작표 표시) |
 | Enter | 지금 스테이지 재시작 / 클리어 화면에서 다음 스테이지 |
 | F12 | 스크린샷 (`screenshots/`) |
 | N | 지금 스테이지 바로 클리어 (테스트용) |
@@ -93,7 +93,7 @@ java -ea -cp "core/build/classes/java/main:core/build/classes/java/test:$(find ~
 
 스크린샷: `docs/images/history/`
 
-## 에셋 (전부 CC0)
+## 에셋 (글꼴 외 전부 CC0)
 
 | 경로 | 출처 |
 |---|---|
@@ -102,6 +102,7 @@ java -ea -cp "core/build/classes/java/main:core/build/classes/java/test:$(find ~
 | `assets/tiles/foozle_lab_tileset.png` | [Sci-fi Lab Tileset](https://foozlecc.itch.io/sci-fi-lab-tileset-decor-traps) — Foozle |
 | `assets/backgrounds/lunar/`, `assets/tiles/lunar_tilesheet.png` | [Lunar Battle Pack](https://mattwalkden.itch.io/lunar-battle-pack) — Matt Walkden |
 | `assets/flag.png` | 강의 예제 Project2 (교체 예정) |
+| `assets/fonts/Galmuri11.ttf` | [갈무리](https://github.com/quiple/galmuri) — 이민서(quiple), **SIL OFL 1.1** (라이선스: `assets/fonts/Galmuri-OFL.md`) |
 
 - 원본: `art-source/` (게임에서 미사용)
 - 이전 버전 에셋: [Space soldier](https://opengameart.org/content/space-soldier-sprite-sheet-32x32) — drakzlin, [Sci-fi platform tiles](https://opengameart.org/content/sci-fi-platform-tiles) — Eris

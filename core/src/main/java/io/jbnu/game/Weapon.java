@@ -6,8 +6,8 @@ package io.jbnu.game;
  */
 public enum Weapon {
     //        이름       데미지 펠릿 퍼짐(°) 반동  연사(초) 탄창 재장전(초) 어깨~총구(월드 단위, Art의 팔 조각 길이 × 2)
-    PISTOL("Pistol",   1,    1,   2f,    80f, 0.20f, 12,  1.0f,      36f),
-    SHOTGUN("Shotgun", 1,    5,  15f,   500f, 0.80f,  4,  1.5f,      48f);
+    PISTOL("권총",     1,    1,   2f,    80f, 0.20f, 12,  1.0f,      36f),
+    SHOTGUN("샷건",    1,    5,  15f,   500f, 0.80f,  4,  1.5f,      48f);
 
     public final String label;
     public final int damage;
