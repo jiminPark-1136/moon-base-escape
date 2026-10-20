@@ -37,6 +37,7 @@ public class Main extends ApplicationAdapter {
     /** 1스테이지부터 잰 플레이 시간 (일시정지·클리어 화면 제외) */
     private float playTime;
 
+    private static final Color DROPPER_TINT = new Color(0.85f, 0.65f, 1f, 1f);
     private static final Color GLASS_EDGE = new Color(0.8f, 0.95f, 1f, 0.9f);
 
     private SpriteBatch batch;
@@ -144,9 +145,25 @@ public class Main extends ApplicationAdapter {
         {"low-oxygen", (Runnable) () -> overviewOf(0)},
         {"stage1-overview", (Runnable) () -> overviewOf(1)},
         {"stage2-overview", (Runnable) () -> overviewOf(2)},
-        {"stage3-overview", (Runnable) () -> {
+        {"stage3-overview", (Runnable) () -> {   // 2스테이지 감압 복도 앞: 천장의 드로퍼
             overview = false;
             camera.zoom = 1;
+            startStage(1);
+            bannerTimer = 0;
+            world.player.bounds.setPosition(900, 64);
+            snapCamera();
+        }},
+        {"stage2-droppers", (Runnable) () -> {   // 3스테이지 크레이터 건너편: 스피터의 산성탄
+            startStage(2);
+            bannerTimer = 0;
+            world.player.bounds.setPosition(1500, 64);
+            snapCamera();
+        }},
+        {"stage3-spitters", (Runnable) () -> { }},   // 산성탄이 날아가는 순간을 잡으려고 0.5초씩 더 찍는다
+        {"stage3-spitters-2", (Runnable) () -> { }},
+        {"stage3-spitters-2b", (Runnable) () -> { }},
+        {"stage3-spitters-2c", (Runnable) () -> { }},
+        {"stage3-spitters-3", (Runnable) () -> {
             startStage(1);
             currentState = GameState.STAGE_CLEAR;
         }},
@@ -318,11 +335,11 @@ public class Main extends ApplicationAdapter {
         batch.setColor(Color.WHITE);
 
         for (Enemy e : world.enemies) {
-            Animation<TextureRegion> a = e.charging ? art.alienWalk : art.alienIdle;
-            // 돌진하면 다리를 빨리 움직이고, 맞은 순간에는 빨갛게 번쩍인다
+            Animation<TextureRegion> a = e.type == Enemy.Type.SPITTER ? art.alienFly : e.charging ? art.alienWalk : art.alienIdle;
+            // 돌진하면 다리를 빨리 움직이고, 맞은 순간에는 빨갛게 번쩍인다. 드로퍼는 보라빛, 매달려 있으면 거꾸로
             float t = e.charging ? elapsed * 1.8f : elapsed;
-            batch.setColor(e.hurtTimer > 0 ? Color.RED : Color.WHITE);
-            drawActor(a, t, e.body.bounds, e.facingRight, 1f);
+            batch.setColor(e.hurtTimer > 0 ? Color.RED : e.type == Enemy.Type.DROPPER ? DROPPER_TINT : Color.WHITE);
+            drawActor(a, t, e.body.bounds, e.facingRight, e.hanging ? -1f : 1f);
         }
         batch.setColor(Color.WHITE);
 
@@ -332,6 +349,14 @@ public class Main extends ApplicationAdapter {
         drawActor(playerAnim, animTime, world.player.bounds, world.facingRight, world.crouching ? 0.75f : 1f);
         if (!world.playerDead()) drawArmAndGun(blink ? 0.3f : 1f);
         batch.setColor(Color.WHITE);
+
+        for (World.Acid ac : world.acids) { // 산성탄: 연두색 덩어리 + 밝은 속
+            Rectangle r = ac.bounds;
+            batch.setColor(World.ACID);
+            batch.draw(pixel, r.x, r.y, r.width, r.height);
+            batch.setColor(0.9f, 1f, 0.7f, 1f);
+            batch.draw(pixel, r.x + 3, r.y + 3, r.width - 6, r.height - 6);
+        }
 
         for (World.Particle pt : world.particles) {
             batch.setColor(pt.color.r, pt.color.g, pt.color.b, Math.min(1f, pt.life));
@@ -392,12 +417,14 @@ public class Main extends ApplicationAdapter {
      */
     private void drawActor(Animation<TextureRegion> a, float time, Rectangle b, boolean facingRight, float squash) {
         TextureRegion frame = a.getKeyFrame(time);
-        float w = frame.getRegionWidth() * Art.SCALE, h = frame.getRegionHeight() * Art.SCALE * squash;
-        float anchor = art.anchorX.get(a, frame.getRegionWidth() / 2) * Art.SCALE;
+        int scale = art.scaleOf.get(a, Art.SCALE);
+        float w = frame.getRegionWidth() * scale, h = frame.getRegionHeight() * scale * squash;
+        float anchor = art.anchorX.get(a, frame.getRegionWidth() / 2) * scale;
         float cx = b.x + b.width / 2;
+        float y = squash < 0 ? b.y + b.height : b.y; // 거꾸로(squash < 0)면 발이 위쪽(천장)에 붙는다
         boolean asDrawn = facingRight != art.facesLeft.contains(a); // 원본 방향 그대로 그려도 되는지
-        if (asDrawn) batch.draw(frame, cx - anchor, b.y, w, h);
-        else batch.draw(frame, cx + anchor, b.y, -w, h); // 좌우 반전
+        if (asDrawn) batch.draw(frame, cx - anchor, y, w, h);
+        else batch.draw(frame, cx + anchor, y, -w, h); // 좌우 반전
     }
 
     /**

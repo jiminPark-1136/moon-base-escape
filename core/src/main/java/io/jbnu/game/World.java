@@ -33,6 +33,12 @@ public class World {
         public boolean stuck;
     }
 
+    /** 스피터의 산성탄. 스테이지 중력을 받아 포물선으로 날아간다. */
+    public static class Acid {
+        public final Rectangle bounds = new Rectangle(0, 0, 12, 12);
+        public float vx, vy, life = 4f;
+    }
+
     /** 산소 = 체력. 0이 되면 사망 → 잠시 후 재시작. */
     public static final float MAX_OXYGEN = 100;
     /** 진공에서 초당 산소 소모: 달 표면(기본 호흡) / 창문이 깨진 방(급격한 감압) / 누출 단계마다 추가 */
@@ -45,6 +51,7 @@ public class World {
     private static final float CONTACT_DAMAGE = 20, INVULNERABLE_TIME = 1.0f, DEATH_TIME = 1.5f;
     private static final Color PLAYER_BLOOD = new Color(0.75f, 0.05f, 0.05f, 1f);
     private static final Color ALIEN_BLOOD = new Color(0.55f, 0.75f, 0.10f, 1f);
+    public static final Color ACID = new Color(0.6f, 1f, 0.2f, 1f);
 
     public final Body player = new Body(0, 0, PLAYER_W, STAND_H);
     public final Array<Rectangle> blocks = new Array<>();
@@ -53,6 +60,7 @@ public class World {
     public final Array<Bullet> bullets = new Array<>();
     public final Array<Enemy> enemies = new Array<>();
     public final Array<Particle> particles = new Array<>();
+    public final Array<Acid> acids = new Array<>();
     public final Array<Window> windows = new Array<>();
     /** 산소 스테이션: 서 있으면 충전 + 누출 수리 */
     public final Array<Rectangle> stations = new Array<>();
@@ -130,7 +138,11 @@ public class World {
         bullets.clear();
         particles.clear();
         enemies.clear();
-        for (float[] s : stage.enemies) enemies.add(new Enemy(s[0], s[1], s[2] > 0));
+        for (float[] s : stage.enemies) {
+            Enemy.Type type = s.length > 3 ? Enemy.Type.values()[(int) s[3]] : Enemy.Type.CRAWLER; // 4번째 값: 0 크롤러, 1 드로퍼, 2 스피터
+            enemies.add(new Enemy(s[0], s[1], s[2] > 0, type));
+        }
+        acids.clear();
         windows.clear();
         for (float[] w : stage.windows) {
             Window win = new Window(new Rectangle(w[0], w[1], w[2], w[3]), new Rectangle(w[4], w[5], w[6], w[7]));
@@ -214,6 +226,7 @@ public class World {
 
         updateBullets(dt);
         updateEnemies(dt);
+        updateAcids(dt);
         updateOxygen(dt);
         if (playerDead()) return;
 
@@ -417,12 +430,44 @@ public class World {
                 }
             }
             e.update(dt, gravity(), blocks, player.bounds, stage.width);
+            if (e.wantsToSpit) { // 스피터: 플레이어 몸 중심을 향해 중력 포물선으로 쏜다
+                e.wantsToSpit = false;
+                Acid a = new Acid();
+                a.bounds.setPosition(centerX(eb) - 6, eb.y + eb.height / 2);
+                float[] v = Enemy.lob(a.bounds.x, a.bounds.y, centerX(player.bounds), player.bounds.y + player.bounds.height / 2, gravity());
+                a.vx = v[0];
+                a.vy = v[1];
+                acids.add(a);
+            }
             if (e.dead() || eb.y < -100) {
                 if (e.dead()) bleed(eb.x + eb.width / 2, eb.y + eb.height / 2, 0, 300, ALIEN_BLOOD, 30);
                 enemies.removeIndex(i);
                 continue;
             }
             if (!playerDead() && invulnerable <= 0 && eb.overlaps(player.bounds)) hurtPlayer(eb);
+        }
+    }
+
+    /** 산성탄: 중력을 받아 날아가고, 블록에 닿으면 튀어 사라지고, 플레이어에 닿으면 적과 닿은 것처럼 피해를 준다. */
+    private void updateAcids(float dt) {
+        for (int i = acids.size - 1; i >= 0; i--) {
+            Acid a = acids.get(i);
+            a.life -= dt;
+            a.vy -= gravity() * dt;
+            a.bounds.x += a.vx * dt;
+            a.bounds.y += a.vy * dt;
+            boolean gone = a.life <= 0 || a.bounds.y < -100;
+            for (Rectangle block : blocks) {
+                if (!gone && a.bounds.overlaps(block)) gone = true;
+            }
+            if (!gone && !playerDead() && invulnerable <= 0 && a.bounds.overlaps(player.bounds)) {
+                hurtPlayer(a.bounds);
+                gone = true;
+            }
+            if (gone) {
+                bleed(a.bounds.x + 6, a.bounds.y + 6, 0, 0, ACID, 8);
+                acids.removeIndex(i);
+            }
         }
     }
 

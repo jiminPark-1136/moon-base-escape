@@ -47,7 +47,10 @@
 - 산소 = 체력: 피격 시 감소 + 우주복 누출(최대 3단계), 진공에서만 소모, 0이면 사망
 - 산소 스테이션: 충전 + 누출 수리
 - 감압 창문: 맞은 탄 수만큼 내구도 감소 (권총 10발 / 샷건 2발), 깨지면 흡입 + 진공
-- 크롤러: 순찰 → 플레이어 발견 시 돌진, 구덩이 낙하 가능
+- 적 3종 (스테이지마다 하나씩 추가)
+  - 크롤러: 순찰 → 플레이어 발견 시 돌진, 구덩이 낙하 가능
+  - 드로퍼(2스테이지~): 천장에 매달려 있다가 아래로 지나가면 낙하
+  - 스피터(3스테이지): 공중에서 산성탄 발사, 탄도를 스테이지 중력으로 계산
 - 피 파티클: 스테이지 중력 적용
 
 ## 코드 구조
@@ -61,7 +64,7 @@
 | `Body` | 중력·충돌 (강의 12장) |
 | `CameraManager` | 추적·흔들림 (강의 10장) |
 | `Weapon` | 권총·샷건 수치 |
-| `Enemy` | 크롤러 AI |
+| `Enemy` | 적 3종 AI (크롤러·드로퍼·스피터), 포물선 탄도 |
 | `Window` | 감압 창문 내구도·균열 |
 | `Stage` | 스테이지별 맵·중력·배경 데이터 |
 | `Art` | 이미지·애니메이션 로딩 |
@@ -71,7 +74,7 @@
 `core/src/test/java/io/jbnu/game/`
 
 - `RecoilHeightCheck`: 중력별 반동 높이
-- `EnemyCheck`: 크롤러 행동
+- `EnemyCheck`: 적 행동, 스피터 탄도
 - `OxygenWindowCheck`: 산소 소모량, 창문 내구도
 - `StageCheck`: 스테이지별 점프 높이, 샷건이 필요한 장애물
 
@@ -97,7 +100,7 @@ java -ea -cp "core/build/classes/java/main:core/build/classes/java/test:$(find ~
 
 | 경로 | 출처 |
 |---|---|
-| `assets/sprites/` | [Sideview Sci-Fi Patreon Collection](https://opengameart.org/content/sideview-sci-fi-patreon-collection) — ansimuz |
+| `assets/sprites/` (marine, alien, alien-flying) | [Sideview Sci-Fi Patreon Collection](https://opengameart.org/content/sideview-sci-fi-patreon-collection) — ansimuz |
 | `assets/backgrounds/ansimuz/` | 위와 동일 |
 | `assets/tiles/foozle_lab_tileset.png` | [Sci-fi Lab Tileset](https://foozlecc.itch.io/sci-fi-lab-tileset-decor-traps) — Foozle |
 | `assets/backgrounds/lunar/`, `assets/tiles/lunar_tilesheet.png` | [Lunar Battle Pack](https://mattwalkden.itch.io/lunar-battle-pack) — Matt Walkden |

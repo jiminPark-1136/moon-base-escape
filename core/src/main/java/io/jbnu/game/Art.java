@@ -91,6 +91,10 @@ public class Art {
     private static final float SHOULDER_X = 9, SHOULDER_Y = 21.5f;
     /** 크롤러 (ansimuz 걷는 외계인) */
     public final Animation<TextureRegion> alienWalk, alienIdle;
+    /** 스피터 (ansimuz 나는 외계인, 프레임마다 따로 된 PNG 8장) */
+    public final Animation<TextureRegion> alienFly;
+    /** 애니메이션별 그리기 배율 (없으면 SCALE). 나는 외계인은 원본이 커서 1배로 그린다. */
+    public final ObjectIntMap<Animation<TextureRegion>> scaleOf = new ObjectIntMap<>();
     /** 애니메이션별 몸 중심의 x (프레임 왼쪽에서 픽셀). 프레임 너비가 달라도 몸이 같은 자리에 그려지게 한다. */
     public final ObjectIntMap<Animation<TextureRegion>> anchorX = new ObjectIntMap<>();
     /** 원본이 왼쪽을 보고 그려진 애니메이션 (나머지는 오른쪽). 뒤집는 방향을 정할 때 쓴다. */
@@ -113,14 +117,20 @@ public class Art {
         marine.dispose();
         alienWalk = strip(ALIEN + "alien-enemy-walk.png",     57, 0.10f, Animation.PlayMode.LOOP);
         alienIdle = strip(ALIEN + "alien-enemy-idle.png",     48, 0.15f, Animation.PlayMode.LOOP);
+        Array<TextureRegion> fly = new Array<>();
+        for (int i = 1; i <= 8; i++) fly.add(new TextureRegion(load("sprites/alien-flying/alien-enemy-flying" + i + ".png")));
+        alienFly = new Animation<>(0.08f, fly, Animation.PlayMode.LOOP);
+        scaleOf.put(alienFly, 1);
         anchorX.put(idle, 16);
         anchorX.put(run, 16);
         anchorX.put(jump, 14);
         anchorX.put(die, 58);
         anchorX.put(alienWalk, 28);
         anchorX.put(alienIdle, 24);
+        anchorX.put(alienFly, 45);
         facesLeft.add(alienWalk);
         facesLeft.add(alienIdle);
+        facesLeft.add(alienFly);
 
         // 지형 (Foozle 연구소 타일: 위 8px = 경고 줄무늬, 그 아래 16px = 벽돌)
         Texture lab = load("tiles/foozle_lab_tileset.png");

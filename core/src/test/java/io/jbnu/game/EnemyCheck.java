@@ -46,6 +46,30 @@ public class EnemyCheck {
         target.hit(1, 0);
         assert target.dead();
         System.out.println("④ 3발에 사망");
+
+        // ⑤ 드로퍼: 플레이어가 멀면 매달려 있고, 바로 아래로 오면 떨어져 바닥에 착지한다
+        Enemy dropper = new Enemy(200, 300, true, Enemy.Type.DROPPER);
+        for (int i = 0; i < 60; i++) dropper.update(DT, G, floor, farPlayer, 10000);
+        assert dropper.hanging && dropper.body.bounds.y == 300 : "dropper should stay hanging";
+        Rectangle under = new Rectangle(210, 64, 36, 60);
+        for (int i = 0; i < 120; i++) dropper.update(DT, G, floor, under, 10000);
+        assert !dropper.hanging && dropper.body.grounded && dropper.body.bounds.y == 64 :  "dropper should land: y=" + dropper.body.bounds.y;
+        System.out.println("⑤ 드로퍼: 매달려 있다가 플레이어가 아래로 오면 낙하·착지");
+
+        // ⑥ 스피터 탄도: 세 가지 중력 모두에서 계산한 포물선이 목표 지점에 떨어진다
+        for (float scale : new float[] {1f, 0.58f, 0.16f}) {
+            float g = 1700 * scale;
+            float[] v = Enemy.lob(0, 300, 500, 80, g);
+            float x = 0, y = 300, vx = v[0], vy = v[1], best = Float.MAX_VALUE;
+            for (int i = 0; i < 600; i++) {
+                vy -= g * DT;
+                x += vx * DT;
+                y += vy * DT;
+                best = Math.min(best, (float) Math.hypot(x - 500, y - 80));
+            }
+            assert best < 15 : "lob misses at " + scale + "G by " + best;
+            System.out.printf("⑥ 스피터 탄도 %.2fG: 목표에서 %.1f 이내로 지나감%n", scale, best);
+        }
         System.out.println("OK");
     }
 }
