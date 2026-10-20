@@ -8,19 +8,19 @@ import com.badlogic.gdx.utils.Array;
 
 /** 게임 로직. 강의 10장 설계대로 World는 로직만, 카메라 연출은 CameraManager가 맡는다. */
 public class World {
-    public static final float WORLD_WIDTH = 3840;
-    public static final float WORLD_HEIGHT = 720;
+    public static final float WORLD_WIDTH = 3200;
+    public static final float WORLD_HEIGHT = 1400;
 
-    private static final float MOVE_SPEED = 200; // 강의 260에서 낮춤 (플레이테스트 피드백)
+    private static final float MOVE_SPEED = 260;
     private static final float JUMP_SPEED = 650;
     /** 강의의 GRAVITY 1700을 지구 중력 1G로 둔다. */
     private static final float EARTH_GRAVITY = 1700;
     /** 1스테이지 인공중력 1G, 2스테이지 (1G + 달)/2, 3스테이지 달 중력. */
     public static final float[] GRAVITY_SCALES = {1f, 0.58f, 0.16f};
 
-    private static final float START_X = 80, START_Y = 64;
+    private static final float START_X = 80, START_Y = 60;
     /** 히트박스. 32px 트루퍼를 2배로 그렸을 때 몸통에 맞춘 크기. */
-    private static final float PLAYER_W = 36, STAND_H = 60, CROUCH_H = 44;
+    private static final float PLAYER_W = 32, STAND_H = 44, CROUCH_H = 28;
     private static final float CROUCH_RECOIL = 0.5f;
     /** 반동으로 생긴 수평 속도가 줄어드는 비율(1/초). 땅에서는 빨리, 공중에서는 천천히 멈춘다. */
     private static final float KICK_FRICTION_GROUND = 10f, KICK_FRICTION_AIR = 1.5f;
@@ -35,7 +35,7 @@ public class World {
     public final Body player = new Body(START_X, START_Y, PLAYER_W, STAND_H);
     public final Array<Rectangle> blocks = new Array<>();
     /** 출구. 닿으면 스테이지 클리어. */
-    public final Rectangle flag = new Rectangle(3700, 64, 48, 56);
+    public final Rectangle flag = new Rectangle(3060, 1060, 20, 100);
     public final Array<Bullet> bullets = new Array<>();
 
     public int gravityIndex = 0;
@@ -53,22 +53,22 @@ public class World {
     private boolean cleared;
 
     public World() {
-        // 1스테이지: 연구동 (1G 인공중력). 바닥 윗면 y = 64, 천장 아랫면 y = 656.
-        // 왼쪽부터 순서대로 조작을 하나씩 가르치는 구조.
-        blocks.add(new Rectangle(0, 0, 1760, 64));       // 바닥 (왼쪽)
-        blocks.add(new Rectangle(1872, 0, 1968, 64));    // 바닥 (오른쪽) — 사이 112px 구덩이
-        blocks.add(new Rectangle(0, 656, 3840, 64));     // 천장
-
-        blocks.add(new Rectangle(520, 64, 64, 64));      // ① 상자: 점프 (높이 64)
-        blocks.add(new Rectangle(1100, 64, 96, 96));     // ② 계단식 발판: 윗면 160
-        blocks.add(new Rectangle(1300, 224, 192, 32));   //    윗면 256
-        blocks.add(new Rectangle(1560, 160, 128, 32));   //    윗면 192
-        //                                                  ③ x 1760~1872 구덩이: 떨어지면 처음부터 (강의 낙사 재시작)
-        blocks.add(new Rectangle(2400, 64, 96, 160));    // ④ 벽: 높이 160. 1G 점프(약 119)로는 못 넘고
-                                                         //    점프 + 샷건 반동(약 69)이어야 넘는다
-        blocks.add(new Rectangle(2800, 116, 256, 540));  // ⑤ 낮은 통로: 바닥과 52px 틈 → 앉아서(높이 44)만 통과
-        blocks.add(new Rectangle(3300, 64, 128, 64));    // ⑥ 출구 앞 발판
-        blocks.add(new Rectangle(3460, 64, 128, 128));
+        // 강의 Project2의 블록 배치
+        blocks.add(new Rectangle(0, 0, 620, 60));
+        blocks.add(new Rectangle(760, 0, 540, 60));
+        blocks.add(new Rectangle(1440, 0, 1760, 60));
+        blocks.add(new Rectangle(300, 60, 80, 64));
+        blocks.add(new Rectangle(900, 60, 96, 80));
+        blocks.add(new Rectangle(1080, 180, 160, 24));
+        blocks.add(new Rectangle(1650, 60, 120, 70));
+        blocks.add(new Rectangle(1790, 60, 120, 140));
+        blocks.add(new Rectangle(1930, 60, 120, 210));
+        blocks.add(new Rectangle(2100, 270, 110, 24));
+        blocks.add(new Rectangle(2280, 320, 210, 24));
+        // 반동 테스트 구간: 발판 윗면 높이 220 / 360 / 1060
+        blocks.add(new Rectangle(2600, 196, 140, 24));
+        blocks.add(new Rectangle(2820, 336, 140, 24));
+        blocks.add(new Rectangle(3000, 1036, 160, 24));
         reset();
     }
 
