@@ -95,7 +95,12 @@ public class Main extends ApplicationAdapter {
 
     /** F12: 현재 화면을 screenshots/ 에 저장 (레포트·발표 자료용). */
     private void screenshots() {
-        if (Gdx.input.isKeyJustPressed(Input.Keys.F12)) saveScreenshot("screenshots/shot-" + System.currentTimeMillis() + ".png");
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F12)) {
+            // gradlew lwjgl3:run은 assets/ 안에서 실행되므로 프로젝트 폴더의 screenshots/로 맞춘다
+            java.io.File base = new java.io.File("").getAbsoluteFile();
+            if (base.getName().equals("assets")) base = base.getParentFile();
+            saveScreenshot(new java.io.File(base, "screenshots/shot-" + System.currentTimeMillis() + ".png").getPath());
+        }
         if (autoShotDir == null) return;
         frameCount++;
         if (frameCount % 30 == 0) {
