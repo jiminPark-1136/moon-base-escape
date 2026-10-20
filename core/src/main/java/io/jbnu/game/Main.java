@@ -29,6 +29,8 @@ public class Main extends ApplicationAdapter {
     /** 강의 10장의 GameState를 일시정지까지 확장. */
     private enum GameState { PLAYING, PAUSED, CLEARED }
 
+    private static final Color GLASS_EDGE = new Color(0.8f, 0.95f, 1f, 0.9f);
+
     private SpriteBatch batch;
     private BitmapFont font;
     private Art art;
@@ -89,9 +91,28 @@ public class Main extends ApplicationAdapter {
         screenshots();
     }
 
-    /** -Dautoshot=폴더 로 실행하면 세 스테이지 분위기를 한 장씩 찍고 종료한다 (그림 확인용). */
+    /**
+     * -Dautoshot=폴더 로 실행하면 아래 장면을 30프레임 간격으로 차례로 만들어 찍고 종료한다 (그림 확인·레포트용).
+     * 각 줄 = {파일 이름, 찍은 뒤 다음 장면을 준비하는 동작}.
+     */
     private final String autoShotDir = System.getProperty("autoshot");
     private int frameCount;
+    private final Object[][] autoShots = {
+        {"look0", (Runnable) () -> world.gravityIndex = 1},
+        {"look1", (Runnable) () -> world.gravityIndex = 2},
+        {"look2", (Runnable) () -> {           // 창문 방이 보이는 샷건 벽 위로 이동
+            world.gravityIndex = 0;
+            world.player.bounds.setPosition(2420, 224);
+            camManager.snapTo(camera, playerCenterX(), playerCenterY());
+        }},
+        {"window-intact", (Runnable) () -> world.windows.first().hp = 4},
+        {"window-cracked", (Runnable) () -> world.windows.first().hp = 0},
+        {"window-broken", (Runnable) () -> {
+            world.oxygen = 12;
+            world.leak = 2;
+        }},
+        {"low-oxygen", null},
+    };
 
     /** F12: 현재 화면을 screenshots/ 에 저장 (레포트·발표 자료용). */
     private void screenshots() {
@@ -103,12 +124,11 @@ public class Main extends ApplicationAdapter {
         }
         if (autoShotDir == null) return;
         frameCount++;
-        if (frameCount % 30 == 0) {
-            int look = frameCount / 30 - 1;
-            saveScreenshot(autoShotDir + "/look" + look + ".png");
-            if (look + 1 >= art.looks.length) Gdx.app.exit();
-            else world.gravityIndex = look + 1;
-        }
+        if (frameCount % 30 != 0) return;
+        Object[] shot = autoShots[frameCount / 30 - 1];
+        saveScreenshot(autoShotDir + "/" + shot[0] + ".png");
+        if (shot[1] == null) Gdx.app.exit();
+        else ((Runnable) shot[1]).run();
     }
 
     private void saveScreenshot(String path) {
@@ -139,6 +159,7 @@ public class Main extends ApplicationAdapter {
             else if (world.firedThisStep == Weapon.PISTOL) camManager.startShake(0.05f, 2f);
             if (world.firedThisStep != null) shootPoseTimer = 0.15f;
             if (world.playerHitThisStep) camManager.startShake(0.25f, 12f);
+            if (world.windowBrokeThisStep) camManager.startShake(0.8f, 18f);
             endingCheck();
         }
         camManager.update(camera, playerCenterX(), playerCenterY(), dt);
@@ -196,7 +217,9 @@ public class Main extends ApplicationAdapter {
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
+        for (Window w : world.windows) drawWindow(w);
         for (Rectangle block : world.blocks) drawBlock(look.terrain, block);
+        for (Rectangle st : world.stations) drawStation(st);
         Rectangle f = world.flag;
         batch.setColor(Color.LIME); // 원본이 검은색이라 어두운 배경에서 보이도록 밝게 칠한다
         batch.draw(art.flag, f.x, f.y, f.width, f.height);
@@ -321,6 +344,7 @@ public class Main extends ApplicationAdapter {
     private void drawHud() {
         batch.setProjectionMatrix(hudMatrix);
         batch.begin();
+        drawLowOxygenVignette();
         Weapon w = world.weapon;
         String reload = world.reloadTimer > 0 ? "  [RELOADING]" : "";
         font.setColor(Color.WHITE);
@@ -328,6 +352,17 @@ public class Main extends ApplicationAdapter {
         font.draw(batch, String.format("Weapon: %s  %d/%d%s", w.label, world.ammo[w.ordinal()], w.magazine, reload), 16, VIEW_H - 40);
         font.draw(batch, world.crouching ? "CROUCH (recoil x0.5)" : "", 16, VIEW_H - 88);
         drawOxygenBar(16, VIEW_H - 76);
+        if (world.leak > 0) {
+            font.setColor(Color.RED);
+            font.draw(batch, "SUIT LEAK x" + world.leak, 270, VIEW_H - 64);
+        }
+        if (world.atStation) {
+            font.setColor(Color.CYAN);
+            font.draw(batch, "O2 REFILL / SUIT REPAIRED", 16, VIEW_H - 108);
+        } else if (world.inVacuum) {
+            font.setColor(Color.ORANGE);
+            font.draw(batch, "VACUUM", 16, VIEW_H - 108);
+        }
         font.setColor(Color.GRAY);
         font.draw(batch, "A/D move  W jump  S crouch  Mouse aim  LMB fire  R reload  1/2/Q weapon  ESC pause  Enter restart", 16, 24);
 
@@ -335,6 +370,72 @@ public class Main extends ApplicationAdapter {
         if (currentState == GameState.PAUSED) font.draw(batch, "PAUSED - ESC to resume", VIEW_W / 2 - 80, VIEW_H / 2);
         if (currentState == GameState.CLEARED) font.draw(batch, "CLEAR! - Enter to restart", VIEW_W / 2 - 85, VIEW_H / 2);
         batch.end();
+    }
+
+    /** 산소 30% 미만: 화면 가장자리가 붉게 맥박친다. 적을수록 진하다. */
+    private void drawLowOxygenVignette() {
+        float ratio = world.oxygen / World.MAX_OXYGEN;
+        if (ratio >= 0.3f || world.playerDead()) return;
+        float strength = 0.4f + 0.6f * (0.3f - ratio) / 0.3f;         // 0.4(30%) ~ 1(0%)
+        float pulse = 0.6f + 0.4f * MathUtils.sin(elapsed * 6f);
+        for (int i = 0; i < 8; i++) { // 바깥에서 안쪽으로 겹겹이 옅어지는 테두리
+            float t = 12 * i;
+            batch.setColor(0.8f, 0f, 0f, 0.45f * strength * pulse * (8 - i) / 8f);
+            batch.draw(pixel, t, t, VIEW_W - 2 * t, 12);
+            batch.draw(pixel, t, VIEW_H - t - 12, VIEW_W - 2 * t, 12);
+            batch.draw(pixel, t, t + 12, 12, VIEW_H - 2 * t - 24);
+            batch.draw(pixel, VIEW_W - t - 12, t + 12, 12, VIEW_H - 2 * t - 24);
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    /**
+     * 창문: 멀쩡하면 푸른 유리 + 균열 단계별 금, 깨지면 그 자리에 우주(별)를 합성해 그린다.
+     * 별은 달 표면 배경의 별 타일을 재사용한다.
+     */
+    private void drawWindow(Window w) {
+        Rectangle g = w.glass;
+        float frame = 6;
+        batch.setColor(0.25f, 0.27f, 0.32f, 1f);
+        batch.draw(pixel, g.x - frame, g.y - frame, g.width + frame * 2, g.height + frame * 2);
+        if (w.broken()) {
+            Art.Look moon = art.looks[art.looks.length - 1];
+            batch.setColor(moon.clearColor);
+            batch.draw(pixel, g.x, g.y, g.width, g.height);
+            batch.setColor(Color.WHITE);
+            for (int i = 0; i < 6; i++) { // 창 안쪽에만 들어가는 고정 위치 별
+                float sx = g.x + 8 + (i * 37) % (g.width - 32), sy = g.y + 8 + (i * 53) % (g.height - 32);
+                batch.draw(moon.stars[i % moon.stars.length], sx, sy, 16, 16);
+            }
+            batch.setColor(GLASS_EDGE); // 깨진 유리 테두리 조각
+            for (int i = 0; i < 5; i++) {
+                batch.draw(pixel, g.x + i * g.width / 5, g.y + g.height - 6 - (i % 2) * 6, 10, 6 + (i % 2) * 6);
+                batch.draw(pixel, g.x + i * g.width / 5 + 8, g.y, 8, 4 + (i % 3) * 4);
+            }
+        } else {
+            batch.setColor(0.45f, 0.75f, 0.95f, 0.35f);
+            batch.draw(pixel, g.x, g.y, g.width, g.height);
+            batch.setColor(GLASS_EDGE);
+            float cx = g.x + g.width * 0.4f, cy = g.y + g.height * 0.55f;
+            for (int i = 0; i < w.crackLevel() * 3; i++) { // 균열 단계마다 금 3줄씩
+                float len = 18 + (i * 13) % 30, angle = i * 47f;
+                batch.draw(pixel, cx, cy, 0, 1, len, 2, 1, 1, angle);
+            }
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    /** 산소 스테이션: 청록색 탱크 + O2 글자 */
+    private void drawStation(Rectangle s) {
+        float pulse = 0.75f + 0.25f * MathUtils.sin(elapsed * 3f);
+        batch.setColor(0.15f, 0.45f, 0.55f, 1f);
+        batch.draw(pixel, s.x, s.y, s.width, s.height);
+        batch.setColor(0.4f * pulse, 0.95f * pulse, 1f * pulse, 1f);
+        batch.draw(pixel, s.x + 6, s.y + 8, s.width - 12, s.height - 24);
+        batch.setColor(Color.WHITE);
+        font.setColor(Color.CYAN);
+        font.draw(batch, "O2", s.x + 8, s.y + s.height + 18);
+        font.setColor(Color.WHITE);
     }
 
     /** 산소(=체력) 게이지. 30% 미만이면 빨간색. */

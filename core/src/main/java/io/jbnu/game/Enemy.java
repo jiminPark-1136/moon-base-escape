@@ -33,6 +33,11 @@ public class Enemy {
         knockback += pushX;
     }
 
+    /** 흡입력 등 외부 힘으로 수평 속도를 더한다 (매 프레임 줄어듦). */
+    public void pull(float dvx) {
+        knockback += dvx;
+    }
+
     public boolean dead() {
         return hp <= 0;
     }

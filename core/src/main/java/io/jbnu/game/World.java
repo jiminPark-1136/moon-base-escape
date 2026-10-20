@@ -40,8 +40,15 @@ public class World {
         public boolean stuck;
     }
 
-    /** 산소 = 체력. 0이 되면 사망 → 잠시 후 재시작. (누출·스테이션은 2주차) */
+    /** 산소 = 체력. 0이 되면 사망 → 잠시 후 재시작. */
     public static final float MAX_OXYGEN = 100;
+    /** 진공에서 초당 산소 소모: 달 표면(기본 호흡) / 창문이 깨진 방(급격한 감압) / 누출 단계마다 추가 */
+    static final float DRAIN_SURFACE = 2, DRAIN_BROKEN_ROOM = 8, DRAIN_PER_LEAK = 3;
+    public static final int MAX_LEAK = 3;
+    private static final float STATION_REFILL = 40;
+    /** 깨진 창문 쪽으로 빨아들이는 가속도(월드 단위/초²). 앉으면 절반. */
+    private static final float SUCTION = 900, CROUCH_SUCTION = 0.5f;
+    private static final Color GLASS = new Color(0.65f, 0.9f, 1f, 1f);
     private static final float CONTACT_DAMAGE = 20, INVULNERABLE_TIME = 1.0f, DEATH_TIME = 1.5f;
     private static final Color PLAYER_BLOOD = new Color(0.75f, 0.05f, 0.05f, 1f);
     private static final Color ALIEN_BLOOD = new Color(0.55f, 0.75f, 0.10f, 1f);
@@ -53,15 +60,28 @@ public class World {
     public final Array<Bullet> bullets = new Array<>();
     public final Array<Enemy> enemies = new Array<>();
     public final Array<Particle> particles = new Array<>();
+    public final Array<Window> windows = new Array<>();
+    /** 산소 스테이션: 서 있으면 충전 + 누출 수리 */
+    public final Array<Rectangle> stations = new Array<>();
+    /** 창문 {유리 x, y, w, h, 방 x, y, w, h} — 재시작 때마다 새 유리로 다시 만든다. */
+    private final float[][] windowSpawns = {
+        {2560, 300, 128, 96, 2496, 64, 304, 592},  // 샷건 벽과 앉기 통로 사이 방
+    };
     /** 적 시작 위치 {x, y, 오른쪽을 보면 1} — 재시작 때마다 여기서 다시 만든다. */
     private final float[][] enemySpawns = {
         {800, 64, 0},    // 첫 상자 뒤
         {2000, 64, 1},   // 구덩이 건너편
-        {2600, 64, 0},   // 샷건 벽 뒤
+        {2650, 64, 0},   // 샷건 벽 뒤 (창문 방)
         {3150, 64, 1},   // 앉기 통로 뒤
     };
 
     public float oxygen;
+    /** 우주복 누출 단계 0~3. 피격마다 +1, 스테이션에서 0으로 수리. */
+    public int leak;
+    /** 지금 플레이어 주변이 진공인지 / 스테이션에 서 있는지 (HUD 표시용) */
+    public boolean inVacuum, atStation;
+    /** 이번 스텝에 창문이 깨졌는지 (카메라 흔들림용) */
+    public boolean windowBrokeThisStep;
     /** 남은 무적 시간 (깜빡임 표시용으로 공개) */
     public float invulnerable;
     /** 사망 후 재시작까지 남은 시간. 0이면 살아 있음. */
@@ -100,6 +120,9 @@ public class World {
         blocks.add(new Rectangle(2800, 116, 256, 540));  // ⑤ 낮은 통로: 바닥과 52px 틈 → 앉아서(높이 44)만 통과
         blocks.add(new Rectangle(3300, 64, 128, 64));    // ⑥ 출구 앞 발판
         blocks.add(new Rectangle(3460, 64, 128, 128));
+
+        stations.add(new Rectangle(2300, 64, 40, 64));   // 샷건 벽 앞
+        stations.add(new Rectangle(3200, 64, 40, 64));   // 앉기 통로 뒤
         reset();
     }
 
@@ -125,7 +148,12 @@ public class World {
         particles.clear();
         enemies.clear();
         for (float[] s : enemySpawns) enemies.add(new Enemy(s[0], s[1], s[2] > 0));
+        windows.clear();
+        for (float[] w : windowSpawns) {
+            windows.add(new Window(new Rectangle(w[0], w[1], w[2], w[3]), new Rectangle(w[4], w[5], w[6], w[7])));
+        }
         oxygen = MAX_OXYGEN;
+        leak = 0;
         invulnerable = 0;
         deathTimer = 0;
         cleared = false;
@@ -138,6 +166,7 @@ public class World {
     public void update(float dt, float aimWorldX, float aimWorldY) {
         firedThisStep = null;
         playerHitThisStep = false;
+        windowBrokeThisStep = false;
         if (cleared || dt <= 0) return;
         updateParticles(dt);
 
@@ -187,12 +216,19 @@ public class World {
         player.applyGravity(gravity(), dt);
         float friction = player.grounded ? KICK_FRICTION_GROUND : KICK_FRICTION_AIR;
         kickX -= kickX * Math.min(1f, friction * dt);
+        Window open = brokenWindowAround(player.bounds);
+        if (open != null) { // 감압: 깨진 창문 쪽으로 끌려간다. 앉아서 버티면 절반
+            float dir = Math.signum(open.centerX() - centerX(player.bounds));
+            kickX += dir * SUCTION * (crouching ? CROUCH_SUCTION : 1f) * dt;
+        }
         player.vx = inputVx + kickX;
         if (player.moveX(dt, blocks, WORLD_WIDTH)) kickX = 0;
         player.moveY(dt, blocks);
 
         updateBullets(dt);
         updateEnemies(dt);
+        updateOxygen(dt);
+        if (playerDead()) return;
 
         // 4. 낭떠러지에 떨어지면 처음부터 (강의의 낙사 복귀)
         if (player.bounds.y < -100) reset();
@@ -276,36 +312,107 @@ public class World {
         if (ammo[weapon.ordinal()] == 0) startReload();
     }
 
-    // ponytail: 총알은 한 스텝에 최대 약 47px 이동(1400 × 1/30)이라 24px 두께 발판을 뚫을 수 있다.
-    // 얇은 벽이나 창문을 맞혀야 할 때 스텝을 나누거나 선분-사각형 교차 검사로 바꾼다.
+    /** 총알 한 스텝 이동을 이 길이 이하로 나눠 검사한다 → 얇은 발판·창문을 뚫고 지나가지 않는다. */
+    private static final float BULLET_SUBSTEP = 8;
+
     private void updateBullets(float dt) {
         for (int i = bullets.size - 1; i >= 0; i--) {
             Bullet b = bullets.get(i);
-            b.bounds.x += b.vx * dt;
-            b.bounds.y += b.vy * dt;
             b.life -= dt;
             boolean dead = b.life <= 0;
-            for (Rectangle block : blocks) {
-                if (b.bounds.overlaps(block)) {
-                    dead = true;
-                    break;
-                }
-            }
-            for (Enemy e : enemies) {
-                if (dead || !b.bounds.overlaps(e.body.bounds)) continue;
-                e.hit(b.damage, Math.signum(b.vx) * 120);
-                bleed(b.bounds.x, b.bounds.y, b.vx, b.vy, ALIEN_BLOOD, 6);
-                dead = true;
+            float dist = (float) Math.sqrt(b.vx * b.vx + b.vy * b.vy) * dt;
+            int steps = Math.max(1, (int) Math.ceil(dist / BULLET_SUBSTEP));
+            for (int s = 0; s < steps && !dead; s++) {
+                b.bounds.x += b.vx * dt / steps;
+                b.bounds.y += b.vy * dt / steps;
+                dead = bulletHits(b);
             }
             if (dead) bullets.removeIndex(i);
         }
     }
 
+    /** 총알이 블록·적·창문 중 하나에 맞았으면 효과를 적용하고 true. */
+    private boolean bulletHits(Bullet b) {
+        for (Rectangle block : blocks) {
+            if (b.bounds.overlaps(block)) return true;
+        }
+        for (Enemy e : enemies) {
+            if (!b.bounds.overlaps(e.body.bounds)) continue;
+            e.hit(b.damage, Math.signum(b.vx) * 120);
+            bleed(b.bounds.x, b.bounds.y, b.vx, b.vy, ALIEN_BLOOD, 6);
+            return true;
+        }
+        for (Window w : windows) {
+            if (w.broken() || !b.bounds.overlaps(w.glass)) continue;
+            bleed(b.bounds.x, b.bounds.y, -b.vx, -b.vy, GLASS, 3); // 유리 파편
+            if (w.hit(b.damage)) {
+                windowBrokeThisStep = true;
+                bleed(w.centerX(), w.glass.y + w.glass.height / 2, 0, 0, GLASS, 40);
+            }
+            return true;
+        }
+        return false;
+    }
+
+    /** 사각형 중심이 깨진 창문 방 안에 있으면 그 창문, 아니면 null. */
+    private Window brokenWindowAround(Rectangle r) {
+        for (Window w : windows) {
+            if (w.broken() && w.room.contains(centerX(r), r.y + r.height / 2)) return w;
+        }
+        return null;
+    }
+
+    private static float centerX(Rectangle r) {
+        return r.x + r.width / 2;
+    }
+
+    /** 진공 여부에 따른 초당 산소 소모. 기지 안(진공 아님)에서는 줄지 않는다. */
+    static float oxygenDrain(boolean onMoonSurface, boolean inBrokenRoom, int leak) {
+        if (!onMoonSurface && !inBrokenRoom) return 0;
+        float base = inBrokenRoom ? DRAIN_BROKEN_ROOM : DRAIN_SURFACE;
+        return base + leak * DRAIN_PER_LEAK;
+    }
+
+    private void updateOxygen(float dt) {
+        boolean onMoon = gravityIndex == GRAVITY_SCALES.length - 1; // 3스테이지 = 기지 밖
+        boolean inRoom = brokenWindowAround(player.bounds) != null;
+        inVacuum = onMoon || inRoom;
+        atStation = false;
+        for (Rectangle s : stations) {
+            if (s.overlaps(player.bounds)) atStation = true;
+        }
+        if (atStation) {
+            oxygen = Math.min(MAX_OXYGEN, oxygen + STATION_REFILL * dt);
+            leak = 0;
+        } else {
+            oxygen = Math.max(0, oxygen - oxygenDrain(onMoon, inRoom, leak) * dt);
+        }
+        if (oxygen <= 0) killPlayer();
+    }
+
+    private void killPlayer() {
+        if (playerDead()) return;
+        deathTimer = DEATH_TIME;
+        Rectangle p = player.bounds;
+        bleed(p.x + p.width / 2, p.y + p.height / 2, 0, 300, PLAYER_BLOOD, 30);
+    }
+
     private void updateEnemies(float dt) {
         for (int i = enemies.size - 1; i >= 0; i--) {
             Enemy e = enemies.get(i);
-            e.update(dt, gravity(), blocks, player.bounds);
             Rectangle eb = e.body.bounds;
+            Window open = brokenWindowAround(eb);
+            if (open != null) { // 감압: 외계인은 버티지 못하고 창문으로 끌려가 빨려 나간다
+                float dx = open.centerX() - centerX(eb);
+                e.pull(Math.signum(dx) * SUCTION * 1.5f * dt);
+                if (Math.abs(dx) < open.glass.width / 2 && e.body.grounded) e.body.vy = 950;
+                if (eb.overlaps(open.glass)) {
+                    bleed(centerX(eb), eb.y + eb.height / 2, 0, 400, ALIEN_BLOOD, 20);
+                    enemies.removeIndex(i);
+                    continue;
+                }
+            }
+            e.update(dt, gravity(), blocks, player.bounds);
             if (e.dead() || eb.y < -100) {
                 if (e.dead()) bleed(eb.x + eb.width / 2, eb.y + eb.height / 2, 0, 300, ALIEN_BLOOD, 30);
                 enemies.removeIndex(i);
@@ -318,6 +425,7 @@ public class World {
     /** 적과 닿으면: 산소 감소, 적 반대쪽으로 튕겨남, 잠시 무적. 산소 0이면 사망. */
     private void hurtPlayer(Rectangle source) {
         oxygen = Math.max(0, oxygen - CONTACT_DAMAGE);
+        leak = Math.min(MAX_LEAK, leak + 1); // 우주복에 구멍 → 진공에서 산소가 더 빨리 샌다
         invulnerable = INVULNERABLE_TIME;
         playerHitThisStep = true;
         float dir = (player.bounds.x + player.bounds.width / 2) < (source.x + source.width / 2) ? -1 : 1;
@@ -326,10 +434,7 @@ public class World {
         player.grounded = false;
         Rectangle p = player.bounds;
         bleed(p.x + p.width / 2, p.y + p.height * 0.6f, dir * 200, 200, PLAYER_BLOOD, 14);
-        if (oxygen <= 0) {
-            deathTimer = DEATH_TIME;
-            bleed(p.x + p.width / 2, p.y + p.height / 2, 0, 300, PLAYER_BLOOD, 30);
-        }
+        if (oxygen <= 0) killPlayer();
     }
 
     /** 피 튀기기: (vx, vy) 방향으로 퍼지는 방울 count개. */
