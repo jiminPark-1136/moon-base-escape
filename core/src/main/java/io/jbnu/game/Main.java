@@ -34,6 +34,10 @@ public class Main extends ApplicationAdapter {
     private Art art;
     private Animation<TextureRegion> playerAnim;
     private float animTime;
+    /** 발사 후 사격 모션을 보여 줄 남은 시간 */
+    private float shootPoseTimer;
+    /** 적 애니메이션용 경과 시간 */
+    private float elapsed;
     private Texture pixelTexture;
     private TextureRegion pixel;
     private Cursor hiddenCursor;
@@ -128,20 +132,25 @@ public class Main extends ApplicationAdapter {
             world.update(dt, mouse.x, mouse.y);
             if (world.firedThisStep == Weapon.SHOTGUN) camManager.startShake(0.15f, 8f);
             else if (world.firedThisStep == Weapon.PISTOL) camManager.startShake(0.05f, 2f);
+            if (world.firedThisStep != null) shootPoseTimer = 0.15f;
+            if (world.playerHitThisStep) camManager.startShake(0.25f, 12f);
             endingCheck();
         }
         camManager.update(camera, playerCenterX(), playerCenterY(), dt);
         updatePlayerAnim(dt);
+        elapsed += dt;
     }
 
     /** 상태에 맞는 애니메이션을 고르고, 바뀌면 처음 프레임부터 재생한다. */
     private void updatePlayerAnim(float dt) {
         Body p = world.player;
+        shootPoseTimer -= dt;
         Animation<TextureRegion> next;
-        if (!p.grounded) next = art.jump;
-        else if (world.crouching) next = art.crouch;
-        else if (Math.abs(p.vx) > 10) next = art.run;
-        else next = art.idle;
+        if (world.playerDead()) next = art.die;
+        else if (!p.grounded) next = art.jump;
+        else if (shootPoseTimer > 0) next = art.shoot; // 서서 쏠 때 총구 화염 모션
+        else if (Math.abs(p.vx) > 10 && !world.crouching) next = art.run;
+        else next = art.idle; // 앉기 전용 그림이 없어 대기 모션을 눌러서 그린다 (drawActor)
         if (next != playerAnim) {
             playerAnim = next;
             animTime = 0;
@@ -188,20 +197,25 @@ public class Main extends ApplicationAdapter {
         batch.draw(art.flag, f.x, f.y, f.width, f.height);
         batch.setColor(Color.WHITE);
 
-        // 플레이어: 32px 프레임을 SCALE배로, 히트박스 아래 가운데에 맞춰 그린다
-        Rectangle p = world.player.bounds;
-        TextureRegion frame = playerAnim.getKeyFrame(animTime);
-        float size = frame.getRegionWidth() * Art.SCALE;
-        float drawX = p.x + p.width / 2 - size / 2;
-        if (world.facingRight) batch.draw(frame, drawX, p.y, size, size);
-        else batch.draw(frame, drawX + size, p.y, -size, size); // 좌우 반전
+        for (Enemy e : world.enemies) {
+            Animation<TextureRegion> a = e.charging ? art.alienWalk : art.alienIdle;
+            // 돌진하면 다리를 빨리 움직이고, 맞은 순간에는 빨갛게 번쩍인다
+            float t = e.charging ? elapsed * 1.8f : elapsed;
+            batch.setColor(e.hurtTimer > 0 ? Color.RED : Color.WHITE);
+            drawActor(a, t, e.body.bounds, e.facingRight, 1f);
+        }
+        batch.setColor(Color.WHITE);
 
-        // 총: 총구에서 조준점 방향으로 회전한 막대
-        float mx = world.muzzleX(), my = world.muzzleY();
-        float angle = MathUtils.atan2(world.aimY - my, world.aimX - mx) * MathUtils.radiansToDegrees;
-        float gunLength = world.weapon == Weapon.SHOTGUN ? 30 : 20;
-        batch.setColor(world.weapon == Weapon.SHOTGUN ? Color.ORANGE : Color.LIGHT_GRAY);
-        batch.draw(pixel, mx, my - 2, 0, 2, gunLength, 4, 1, 1, angle);
+        // 플레이어: 맞은 뒤 무적 시간에는 깜빡인다
+        boolean blink = world.invulnerable > 0 && ((int) (world.invulnerable * 10)) % 2 == 0;
+        batch.setColor(1, 1, 1, blink ? 0.3f : 1f);
+        drawActor(playerAnim, animTime, world.player.bounds, world.facingRight, world.crouching ? 0.75f : 1f);
+        batch.setColor(Color.WHITE);
+
+        for (World.Particle pt : world.particles) {
+            batch.setColor(pt.color.r, pt.color.g, pt.color.b, Math.min(1f, pt.life));
+            batch.draw(pixel, pt.x - 2, pt.y - 2, 4, 4);
+        }
 
         batch.setColor(Color.YELLOW);
         for (World.Bullet b : world.bullets) {
@@ -252,6 +266,20 @@ public class Main extends ApplicationAdapter {
     }
 
     /**
+     * 캐릭터 프레임을 SCALE배로, 몸 중심(anchorX)을 히트박스 가운데에 맞춰 발밑부터 그린다.
+     * squash < 1이면 세로로 눌러 그린다 (앉기 전용 그림이 없는 동안의 대용).
+     */
+    private void drawActor(Animation<TextureRegion> a, float time, Rectangle b, boolean facingRight, float squash) {
+        TextureRegion frame = a.getKeyFrame(time);
+        float w = frame.getRegionWidth() * Art.SCALE, h = frame.getRegionHeight() * Art.SCALE * squash;
+        float anchor = art.anchorX.get(a, frame.getRegionWidth() / 2) * Art.SCALE;
+        float cx = b.x + b.width / 2;
+        boolean asDrawn = facingRight != art.facesLeft.contains(a); // 원본 방향 그대로 그려도 되는지
+        if (asDrawn) batch.draw(frame, cx - anchor, b.y, w, h);
+        else batch.draw(frame, cx + anchor, b.y, -w, h); // 좌우 반전
+    }
+
+    /**
      * 블록을 타일로 채운다: body 타일을 반복하고 맨 위에 top 띠를 덮는다.
      * 타일은 Art.SCALE배로 그리고, 블록 끝에 걸치는 타일은 늘리지 않고 잘라서 그린다.
      */
@@ -293,7 +321,8 @@ public class Main extends ApplicationAdapter {
         font.setColor(Color.WHITE);
         font.draw(batch, String.format("Gravity: %.2fG  (G: change)", World.GRAVITY_SCALES[world.gravityIndex]), 16, VIEW_H - 16);
         font.draw(batch, String.format("Weapon: %s  %d/%d%s", w.label, world.ammo[w.ordinal()], w.magazine, reload), 16, VIEW_H - 40);
-        font.draw(batch, world.crouching ? "CROUCH (recoil x0.5)" : "", 16, VIEW_H - 64);
+        font.draw(batch, world.crouching ? "CROUCH (recoil x0.5)" : "", 16, VIEW_H - 88);
+        drawOxygenBar(16, VIEW_H - 76);
         font.setColor(Color.GRAY);
         font.draw(batch, "A/D move  W jump  S crouch  Mouse aim  LMB fire  R reload  1/2/Q weapon  ESC pause  Enter restart", 16, 24);
 
@@ -301,6 +330,17 @@ public class Main extends ApplicationAdapter {
         if (currentState == GameState.PAUSED) font.draw(batch, "PAUSED - ESC to resume", VIEW_W / 2 - 80, VIEW_H / 2);
         if (currentState == GameState.CLEARED) font.draw(batch, "CLEAR! - Enter to restart", VIEW_W / 2 - 85, VIEW_H / 2);
         batch.end();
+    }
+
+    /** 산소(=체력) 게이지. 30% 미만이면 빨간색. */
+    private void drawOxygenBar(float x, float y) {
+        float w = 200, h = 12, ratio = world.oxygen / World.MAX_OXYGEN;
+        batch.setColor(0.15f, 0.15f, 0.2f, 0.8f);
+        batch.draw(pixel, x, y, w, h);
+        batch.setColor(ratio < 0.3f ? Color.RED : Color.CYAN);
+        batch.draw(pixel, x, y, w * ratio, h);
+        batch.setColor(Color.WHITE);
+        font.draw(batch, "O2", x + w + 8, y + h);
     }
 
     @Override

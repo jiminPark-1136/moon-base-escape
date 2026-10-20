@@ -7,15 +7,17 @@ import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.Animation;
 import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.utils.Array;
+import com.badlogic.gdx.utils.ObjectIntMap;
+import com.badlogic.gdx.utils.ObjectSet;
 
 /**
  * 모든 그림을 한 곳에서 불러온다. 스프라이트를 바꾸거나 고칠 때는 이 파일만 보면 된다.
  *
  * 스프라이트 수정 방법:
  * - 이미지 편집: assets/ 아래 PNG를 Aseprite·Piskel 등으로 열어 고친 뒤 같은 이름으로 저장
- * - 스트립 규칙: 가로로 이어 붙인 정사각형 프레임. 프레임 크기 = 이미지 높이, 프레임 수 = 너비 / 높이
- *   → 프레임을 더하거나 빼도 코드 수정 없이 자동 인식된다. 사용할 프레임 범위만 아래에서 바꾼다.
- * - 트루퍼 스트립은 앞절반이 맨손, 뒷절반이 소총을 든 모습이다. 총은 마우스 방향으로 따로 그리므로 맨손 절반을 쓴다.
+ * - 스트립 규칙: 같은 너비의 프레임을 가로로 이어 붙인 한 줄 이미지. 아래 표에 프레임 너비를 적으면
+ *   프레임 수(= 이미지 너비 / 프레임 너비)는 자동으로 센다 → 프레임을 더하거나 빼도 코드 수정이 필요 없다.
+ * - 캐릭터는 오른쪽을 보는 그림이다. 왼쪽은 뒤집어서 그린다.
  * - 타일·배경 좌표는 이미지 왼쪽 위 기준 픽셀이다.
  */
 public class Art {
@@ -64,9 +66,17 @@ public class Art {
         }
     }
 
-    private static final String TROOPER = "sprites/trooper/";
+    private static final String MARINE = "sprites/marine/";
+    private static final String ALIEN = "sprites/alien/";
 
-    public final Animation<TextureRegion> idle, run, jump, crouch;
+    /** 플레이어 (ansimuz 스페이스 마린: 소총을 든 채로 움직인다) */
+    public final Animation<TextureRegion> idle, run, jump, shoot, die;
+    /** 크롤러 (ansimuz 걷는 외계인) */
+    public final Animation<TextureRegion> alienWalk, alienIdle;
+    /** 애니메이션별 몸 중심의 x (프레임 왼쪽에서 픽셀). 프레임 너비가 달라도 몸이 같은 자리에 그려지게 한다. */
+    public final ObjectIntMap<Animation<TextureRegion>> anchorX = new ObjectIntMap<>();
+    /** 원본이 왼쪽을 보고 그려진 애니메이션 (나머지는 오른쪽). 뒤집는 방향을 정할 때 쓴다. */
+    public final ObjectSet<Animation<TextureRegion>> facesLeft = new ObjectSet<>();
     /** 0: 연구동, 1: 붕괴 구역, 2: 달 표면 */
     public final Look[] looks;
     public final Texture flag;
@@ -74,11 +84,23 @@ public class Art {
     private final Array<Texture> textures = new Array<>();
 
     public Art() {
-        //                    파일                                       첫 프레임, 개수, 프레임 시간(초), 반복
-        idle   = strip(TROOPER + "spr_trooper_idle_strip4.png",    0, 2, 0.40f, Animation.PlayMode.LOOP);
-        run    = strip(TROOPER + "spr_trooper_run_strip12.png",    0, 6, 0.09f, Animation.PlayMode.LOOP);
-        jump   = strip(TROOPER + "spr_trooper_jump_strip8.png",    0, 4, 0.10f, Animation.PlayMode.NORMAL);
-        crouch = strip(TROOPER + "spr_trooper_crouch_strip8.png",  0, 4, 0.05f, Animation.PlayMode.NORMAL);
+        //                    파일                               프레임 너비, 프레임 시간(초), 반복
+        idle      = strip(MARINE + "space-marine-idle.png",   48, 0.15f, Animation.PlayMode.LOOP);
+        run       = strip(MARINE + "space-marine-run.png",    48, 0.07f, Animation.PlayMode.LOOP);
+        jump      = strip(MARINE + "space-marine-jump.png",   36, 0.08f, Animation.PlayMode.NORMAL);
+        shoot     = strip(MARINE + "space-marine-shoot.png",  64, 0.06f, Animation.PlayMode.NORMAL);
+        die       = strip(MARINE + "space-marine-die.png",    80, 0.15f, Animation.PlayMode.NORMAL);
+        alienWalk = strip(ALIEN + "alien-enemy-walk.png",     57, 0.10f, Animation.PlayMode.LOOP);
+        alienIdle = strip(ALIEN + "alien-enemy-idle.png",     48, 0.15f, Animation.PlayMode.LOOP);
+        anchorX.put(idle, 16);
+        anchorX.put(run, 16);
+        anchorX.put(jump, 14);
+        anchorX.put(shoot, 16);
+        anchorX.put(die, 58);
+        anchorX.put(alienWalk, 28);
+        anchorX.put(alienIdle, 24);
+        facesLeft.add(alienWalk);
+        facesLeft.add(alienIdle);
 
         // 지형 (Foozle 연구소 타일: 위 8px = 경고 줄무늬, 그 아래 16px = 벽돌)
         Texture lab = load("tiles/foozle_lab_tileset.png");
@@ -121,15 +143,13 @@ public class Art {
         return t;
     }
 
-    private Animation<TextureRegion> strip(String path, int first, int count, float frameTime, Animation.PlayMode mode) {
+    private Animation<TextureRegion> strip(String path, int frameWidth, float frameTime, Animation.PlayMode mode) {
         Texture t = load(path);
-        int size = t.getHeight();
-        int total = t.getWidth() / size;
-        if (first + count > total) {
-            throw new IllegalArgumentException(path + ": frames " + first + ".." + (first + count - 1) + " but strip has " + total);
+        if (t.getWidth() % frameWidth != 0) {
+            throw new IllegalArgumentException(path + ": width " + t.getWidth() + " is not a multiple of frame width " + frameWidth);
         }
         Array<TextureRegion> frames = new Array<>();
-        for (int i = first; i < first + count; i++) frames.add(new TextureRegion(t, i * size, 0, size, size));
+        for (int x = 0; x < t.getWidth(); x += frameWidth) frames.add(new TextureRegion(t, x, 0, frameWidth, t.getHeight()));
         return new Animation<>(frameTime, frames, mode);
     }
 

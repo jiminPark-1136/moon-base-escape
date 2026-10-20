@@ -25,21 +25,30 @@ A/D 이동 · W 점프 · S 앉기(반동 50%) · 마우스 조준 · 왼쪽 클
 | `Body` | 중력 + `moveX`/`moveY` 충돌 (강의 12장 로직) |
 | `Weapon` | 권총/샷건 데이터 |
 | `CameraManager` | 추적 + 흔들림 (강의 10장 로직) |
+| `Enemy` | 크롤러: 순찰, 돌진, 피격, 사망 |
 | `Art` | 모든 이미지·애니메이션 로딩 (스프라이트 수정 시 여기만 보면 됨) |
 
-반동 높이 확인: `core/src/test/java/io/jbnu/game/RecoilHeightCheck.java`
+검증 코드 (`core/src/test/java/io/jbnu/game/`): `RecoilHeightCheck`(반동 높이), `EnemyCheck`(크롤러 행동)
+
+```bash
+./gradlew core:testClasses
+```
+
+```bash
+java -ea -cp "core/build/classes/java/main:core/build/classes/java/test:$(find ~/.gradle/caches/modules-2 -name 'gdx-1.13.1.jar' | head -1)" io.jbnu.game.EnemyCheck
+```
 
 ## 에셋과 라이선스 (모두 CC0)
 
 | 경로 | 출처 |
 |---|---|
-| `assets/sprites/` (trooper, enemies, shots, items) | [Space soldier (sprite sheet 32x32)](https://opengameart.org/content/space-soldier-sprite-sheet-32x32) by drakzlin |
+| `assets/sprites/marine/`, `assets/sprites/alien/` | [Sideview Sci-Fi Patreon Collection](https://opengameart.org/content/sideview-sci-fi-patreon-collection) by ansimuz (Luis Zuno) — 스페이스 마린, 걷는 외계인 |
 | `assets/tiles/foozle_lab_tileset.png` | [Sci-fi Lab - Tileset / Decor / Traps](https://foozlecc.itch.io/sci-fi-lab-tileset-decor-traps) by Foozle (commissioned from aimen23b) |
 | `assets/backgrounds/ansimuz/` | [Sideview Sci-Fi Patreon Collection](https://opengameart.org/content/sideview-sci-fi-patreon-collection) by ansimuz (Luis Zuno) |
 | `assets/backgrounds/lunar/`, `assets/tiles/lunar_tilesheet.png` | [Lunar Battle Pack](https://mattwalkden.itch.io/lunar-battle-pack) by Matt Walkden |
 | `assets/flag.png` | 강의 예제 Project2 (교체 예정) |
 
-`art-source/`에는 내려받은 원본 압축 파일을 그대로 보관한다 (PSD, 안 쓴 적·함정·장식 스프라이트 포함). 게임은 이 폴더를 읽지 않는다. `art-source/eris/`는 이전에 쓰다 교체한 [Sci-fi platform tiles](https://opengameart.org/content/sci-fi-platform-tiles) (Eris, CC0).
+`art-source/`에는 내려받은 원본 압축 파일을 그대로 보관한다 (PSD, 안 쓴 적·함정·장식 스프라이트 포함). 게임은 이 폴더를 읽지 않는다. 처음에 쓰다 교체한 [Space soldier](https://opengameart.org/content/space-soldier-sprite-sheet-32x32) (drakzlin, CC0)도 `trooper_stripes_all.zip`으로 남아 있다. `art-source/eris/`는 이전에 쓰다 교체한 [Sci-fi platform tiles](https://opengameart.org/content/sci-fi-platform-tiles) (Eris, CC0).
 
 ## 스테이지별 분위기
 
@@ -59,6 +68,6 @@ A/D 이동 · W 점프 · S 앉기(반동 50%) · 마우스 조준 · 왼쪽 클
 ## 스프라이트 수정 방법
 
 1. `assets/` 아래 PNG를 Aseprite, Piskel 등 픽셀아트 편집기로 열어 고치고 **같은 이름으로 저장**한다.
-2. 스트립 규칙: 정사각형 프레임을 가로로 이어 붙인 한 줄 이미지. 프레임 크기 = 이미지 높이, 프레임 수 = 너비 ÷ 높이. 프레임을 늘리거나 줄여도 코드는 자동으로 인식한다.
+2. 스트립 규칙: 같은 너비의 프레임을 가로로 이어 붙인 한 줄 이미지. `Art.java`에 프레임 너비만 적으면 프레임 수(= 이미지 너비 ÷ 프레임 너비)는 자동으로 센다.
 3. 어느 프레임을 쓸지, 재생 속도, 타일을 어디서 잘라 쓸지, 배경 겹의 배율·높이·패럴랙스는 모두 [`Art.java`](core/src/main/java/io/jbnu/game/Art.java) 한 파일에 있다.
-4. 트루퍼 스트립은 앞절반이 맨손, 뒷절반이 소총을 든 모습이다. 총은 마우스 방향으로 따로 그리므로 지금은 맨손 절반을 쓴다.
+4. 프레임 너비가 애니메이션마다 달라도 몸이 같은 자리에 그려지도록, 애니메이션별 몸 중심 x(`anchorX`)를 `Art.java`에 적는다. 원본이 왼쪽을 보는 그림은 `facesLeft`에 넣는다.

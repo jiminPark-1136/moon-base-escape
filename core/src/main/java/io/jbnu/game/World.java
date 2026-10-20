@@ -2,6 +2,7 @@ package io.jbnu.game;
 
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
+import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.math.MathUtils;
 import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.utils.Array;
@@ -32,11 +33,41 @@ public class World {
         public int damage;
     }
 
+    /** 피 한 방울. 스테이지 중력을 받는다 → 달에서는 천천히 떨어진다. 블록에 닿으면 그 자리에 붙는다. */
+    public static class Particle {
+        public float x, y, vx, vy, life;
+        public final Color color = new Color();
+        public boolean stuck;
+    }
+
+    /** 산소 = 체력. 0이 되면 사망 → 잠시 후 재시작. (누출·스테이션은 2주차) */
+    public static final float MAX_OXYGEN = 100;
+    private static final float CONTACT_DAMAGE = 20, INVULNERABLE_TIME = 1.0f, DEATH_TIME = 1.5f;
+    private static final Color PLAYER_BLOOD = new Color(0.75f, 0.05f, 0.05f, 1f);
+    private static final Color ALIEN_BLOOD = new Color(0.55f, 0.75f, 0.10f, 1f);
+
     public final Body player = new Body(START_X, START_Y, PLAYER_W, STAND_H);
     public final Array<Rectangle> blocks = new Array<>();
     /** 출구. 닿으면 스테이지 클리어. */
     public final Rectangle flag = new Rectangle(3700, 64, 48, 56);
     public final Array<Bullet> bullets = new Array<>();
+    public final Array<Enemy> enemies = new Array<>();
+    public final Array<Particle> particles = new Array<>();
+    /** 적 시작 위치 {x, y, 오른쪽을 보면 1} — 재시작 때마다 여기서 다시 만든다. */
+    private final float[][] enemySpawns = {
+        {800, 64, 0},    // 첫 상자 뒤
+        {2000, 64, 1},   // 구덩이 건너편
+        {2600, 64, 0},   // 샷건 벽 뒤
+        {3150, 64, 1},   // 앉기 통로 뒤
+    };
+
+    public float oxygen;
+    /** 남은 무적 시간 (깜빡임 표시용으로 공개) */
+    public float invulnerable;
+    /** 사망 후 재시작까지 남은 시간. 0이면 살아 있음. */
+    public float deathTimer;
+    /** 이번 스텝에 플레이어가 맞았는지 (카메라 흔들림용) */
+    public boolean playerHitThisStep;
 
     public int gravityIndex = 0;
     public Weapon weapon = Weapon.PISTOL;
@@ -91,12 +122,36 @@ public class World {
         reloadTimer = 0;
         cooldownTimer = 0;
         bullets.clear();
+        particles.clear();
+        enemies.clear();
+        for (float[] s : enemySpawns) enemies.add(new Enemy(s[0], s[1], s[2] > 0));
+        oxygen = MAX_OXYGEN;
+        invulnerable = 0;
+        deathTimer = 0;
         cleared = false;
+    }
+
+    public boolean playerDead() {
+        return deathTimer > 0;
     }
 
     public void update(float dt, float aimWorldX, float aimWorldY) {
         firedThisStep = null;
+        playerHitThisStep = false;
         if (cleared || dt <= 0) return;
+        updateParticles(dt);
+
+        // 사망 연출 중: 입력을 막고 몸만 떨어지게 둔 뒤 재시작
+        if (playerDead()) {
+            player.vx = 0;
+            player.applyGravity(gravity(), dt);
+            player.moveY(dt, blocks);
+            updateEnemies(dt);
+            deathTimer -= dt;
+            if (deathTimer <= 0) reset();
+            return;
+        }
+        invulnerable = Math.max(0, invulnerable - dt);
         aimX = aimWorldX;
         aimY = aimWorldY;
         facingRight = aimX >= player.bounds.x + player.bounds.width / 2;
@@ -137,6 +192,7 @@ public class World {
         player.moveY(dt, blocks);
 
         updateBullets(dt);
+        updateEnemies(dt);
 
         // 4. 낭떠러지에 떨어지면 처음부터 (강의의 낙사 복귀)
         if (player.bounds.y < -100) reset();
@@ -178,12 +234,13 @@ public class World {
         b.height = want ? CROUCH_H : STAND_H;
     }
 
+    /** 총구: 스페이스 마린 스프라이트의 소총 끝 (바라보는 쪽으로 몸 중심에서 36) */
     public float muzzleX() {
-        return player.bounds.x + player.bounds.width / 2;
+        return player.bounds.x + player.bounds.width / 2 + (facingRight ? 36 : -36);
     }
 
     public float muzzleY() {
-        return player.bounds.y + player.bounds.height * 0.65f;
+        return player.bounds.y + player.bounds.height * 0.6f;
     }
 
     private void fire() {
@@ -234,7 +291,84 @@ public class World {
                     break;
                 }
             }
+            for (Enemy e : enemies) {
+                if (dead || !b.bounds.overlaps(e.body.bounds)) continue;
+                e.hit(b.damage, Math.signum(b.vx) * 120);
+                bleed(b.bounds.x, b.bounds.y, b.vx, b.vy, ALIEN_BLOOD, 6);
+                dead = true;
+            }
             if (dead) bullets.removeIndex(i);
+        }
+    }
+
+    private void updateEnemies(float dt) {
+        for (int i = enemies.size - 1; i >= 0; i--) {
+            Enemy e = enemies.get(i);
+            e.update(dt, gravity(), blocks, player.bounds);
+            Rectangle eb = e.body.bounds;
+            if (e.dead() || eb.y < -100) {
+                if (e.dead()) bleed(eb.x + eb.width / 2, eb.y + eb.height / 2, 0, 300, ALIEN_BLOOD, 30);
+                enemies.removeIndex(i);
+                continue;
+            }
+            if (!playerDead() && invulnerable <= 0 && eb.overlaps(player.bounds)) hurtPlayer(eb);
+        }
+    }
+
+    /** 적과 닿으면: 산소 감소, 적 반대쪽으로 튕겨남, 잠시 무적. 산소 0이면 사망. */
+    private void hurtPlayer(Rectangle source) {
+        oxygen = Math.max(0, oxygen - CONTACT_DAMAGE);
+        invulnerable = INVULNERABLE_TIME;
+        playerHitThisStep = true;
+        float dir = (player.bounds.x + player.bounds.width / 2) < (source.x + source.width / 2) ? -1 : 1;
+        kickX = dir * 350;
+        player.vy = Math.max(player.vy, 300);
+        player.grounded = false;
+        Rectangle p = player.bounds;
+        bleed(p.x + p.width / 2, p.y + p.height * 0.6f, dir * 200, 200, PLAYER_BLOOD, 14);
+        if (oxygen <= 0) {
+            deathTimer = DEATH_TIME;
+            bleed(p.x + p.width / 2, p.y + p.height / 2, 0, 300, PLAYER_BLOOD, 30);
+        }
+    }
+
+    /** 피 튀기기: (vx, vy) 방향으로 퍼지는 방울 count개. */
+    private void bleed(float x, float y, float vx, float vy, Color color, int count) {
+        for (int i = 0; i < count; i++) {
+            Particle p = new Particle();
+            p.x = x;
+            p.y = y;
+            float speed = MathUtils.random(80, 260);
+            float angle = MathUtils.atan2(vy, vx) * MathUtils.radiansToDegrees + MathUtils.random(-60f, 60f);
+            if (vx == 0 && vy == 0) angle = MathUtils.random(360f);
+            p.vx = MathUtils.cosDeg(angle) * speed;
+            p.vy = MathUtils.sinDeg(angle) * speed;
+            p.life = MathUtils.random(1.2f, 2.0f);
+            p.color.set(color).mul(MathUtils.random(0.7f, 1.1f), MathUtils.random(0.7f, 1.1f), 1f, 1f);
+            particles.add(p);
+        }
+    }
+
+    // ponytail: 파티클마다 모든 블록과 겹침 검사(파티클 수 × 블록 수). 수백 개 이상 동시에 나오면 공간 분할로 바꾼다.
+    private void updateParticles(float dt) {
+        float g = gravity();
+        for (int i = particles.size - 1; i >= 0; i--) {
+            Particle p = particles.get(i);
+            p.life -= dt;
+            if (p.life <= 0) {
+                particles.removeIndex(i);
+                continue;
+            }
+            if (p.stuck) continue;
+            p.vy -= g * dt;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            for (Rectangle block : blocks) {
+                if (block.contains(p.x, p.y)) {
+                    p.stuck = true; // 바닥·벽에 묻은 자국으로 남는다
+                    break;
+                }
+            }
         }
     }
 }
