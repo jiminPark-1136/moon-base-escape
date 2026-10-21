@@ -39,7 +39,7 @@ git tag v0.5-playtest && git push origin v0.5-playtest
 | 키 | 동작 |
 |---|---|
 | A / D | 이동 |
-| W | 점프 |
+| W / Space | 점프 |
 | S | 앉기 (반동 50%) |
 | 마우스 / 좌클릭 | 조준 / 사격 |
 | R | 재장전 |

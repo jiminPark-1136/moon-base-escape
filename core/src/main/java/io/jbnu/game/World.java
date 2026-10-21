@@ -194,7 +194,7 @@ public class World {
         if (Gdx.input.isKeyPressed(Input.Keys.A)) inputVx -= MOVE_SPEED;
         if (Gdx.input.isKeyPressed(Input.Keys.D)) inputVx += MOVE_SPEED;
         if (crouching) inputVx *= 0.5f;
-        if (Gdx.input.isKeyJustPressed(Input.Keys.W) && player.grounded && !crouching) {
+        if ((Gdx.input.isKeyJustPressed(Input.Keys.W) || Gdx.input.isKeyJustPressed(Input.Keys.SPACE)) && player.grounded && !crouching) {
             player.vy = (float) Math.sqrt(2 * gravity() * stage.jumpHeight); // 스테이지별 점프 높이 → 속도 (1G: 650)
             player.grounded = false;
         }

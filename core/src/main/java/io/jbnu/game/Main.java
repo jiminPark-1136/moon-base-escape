@@ -656,7 +656,7 @@ public class Main extends ApplicationAdapter {
     /** 조작표 (시작 화면·일시정지 화면 공용). 다 그린 뒤의 y를 돌려준다. */
     private float drawControls(float y) {
         String[][] keys = {
-            {"A / D", "이동"}, {"W", "점프"}, {"S", "앉기 (반동 절반)"}, {"R", "재장전"},
+            {"A / D", "이동"}, {"W / Space", "점프"}, {"S", "앉기 (반동 절반)"}, {"R", "재장전"},
             {"1 / 2 / Q", "권총 / 샷건 / 바꾸기"}, {"ESC", "일시정지"}, {"Enter", "스테이지 다시 시작"},
         };
         for (String[] k : keys) {
