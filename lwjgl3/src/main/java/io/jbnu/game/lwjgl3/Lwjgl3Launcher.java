@@ -7,8 +7,18 @@ import io.jbnu.game.Main;
 /** Launches the desktop (LWJGL3) application. */
 public class Lwjgl3Launcher {
     public static void main(String[] args) {
-        if (StartupHelper.startNewJvmIfRequired()) return; // This handles macOS support and helps on Windows.
-        createApplication();
+        try {
+            if (StartupHelper.startNewJvmIfRequired()) return; // This handles macOS support and helps on Windows.
+            createApplication();
+        } catch (Throwable t) {
+            // 배포판은 콘솔이 없어 오류가 안 보인다 → 홈 폴더에 남겨서 플레이테스터가 보내 줄 수 있게
+            try (java.io.PrintStream out = new java.io.PrintStream(new java.io.File(System.getProperty("user.home"), "MoonBaseEscape-error.txt"), "UTF-8")) {
+                out.println(System.getProperty("os.name") + " / Java " + System.getProperty("java.version"));
+                t.printStackTrace(out);
+            } catch (Exception ignored) {
+            }
+            throw t;
+        }
     }
 
     private static Lwjgl3Application createApplication() {

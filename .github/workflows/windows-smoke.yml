@@ -1,0 +1,39 @@
+# 윈도우 실행 확인: 배포판 exe를 영문 경로·한글 경로에서 띄워 보고 살아 있는지, 오류 로그가 남는지 본다.
+# GitHub 윈도우 서버는 그래픽 카드가 없어 OpenGL 오류로 끝나는 것은 정상 — 그 전에 죽는지가 관심사.
+name: windows-smoke
+
+on:
+  workflow_dispatch:
+
+jobs:
+  smoke:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - uses: gradle/actions/setup-gradle@v4
+      - run: ./gradlew lwjgl3:packageWinX64
+      - name: 영문·한글 경로에서 실행
+        shell: pwsh
+        run: |
+          $zip = Get-ChildItem lwjgl3/build/construo/dist/*winX64.zip | Select-Object -First 1
+          foreach ($dir in @("C:\t\game", "C:\t\한글 폴더")) {
+            Write-Host "=== $dir"
+            Expand-Archive $zip.FullName -DestinationPath $dir -Force
+            $exe = Get-ChildItem $dir -Recurse -Filter MoonBaseEscape.exe | Select-Object -First 1
+            Remove-Item "$HOME\MoonBaseEscape-error.txt" -ErrorAction SilentlyContinue
+            $p = Start-Process $exe.FullName -WorkingDirectory $exe.DirectoryName -PassThru
+            Start-Sleep 20
+            if ($p.HasExited) { Write-Host "exited, code $($p.ExitCode)" } else { Write-Host "still running"; Stop-Process $p -Force }
+            if (Test-Path "$HOME\MoonBaseEscape-error.txt") { Get-Content "$HOME\MoonBaseEscape-error.txt" -Encoding UTF8 | Select-Object -First 25 } else { Write-Host "(오류 로그 없음)" }
+            Write-Host "--- java -jar 직접 실행"
+            $java = Get-ChildItem $dir -Recurse -Filter java.exe | Select-Object -First 1
+            $jar = Get-ChildItem $dir -Recurse -Filter *.jar | Select-Object -First 1
+            $q = Start-Process $java.FullName -ArgumentList "-jar", "`"$($jar.FullName)`"" -WorkingDirectory $jar.DirectoryName -PassThru -RedirectStandardError "$dir.err.txt" -RedirectStandardOutput "$dir.out.txt"
+            Start-Sleep 20
+            if ($q.HasExited) { Write-Host "exited, code $($q.ExitCode)" } else { Write-Host "still running"; Stop-Process $q -Force }
+            Get-Content "$dir.out.txt", "$dir.err.txt" | Select-Object -First 25
+          }
