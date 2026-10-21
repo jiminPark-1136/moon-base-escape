@@ -51,7 +51,7 @@ jobs:
               (cd "$app/Contents/MacOS" && for x in runtime app *.jar; do mv "$x" ../Resources/ && ln -s "../Resources/$x" "$x"; done)
               codesign --force -s - "$app"
               codesign --verify --deep --strict "$app"
-              ditto -c -k --keepParent "$(dirname "$app")" "$z"
+              ditto -c -k --keepParent "$app" "$z"
             else
               (cd tmp && zip -qry "../$z" .)
             fi
