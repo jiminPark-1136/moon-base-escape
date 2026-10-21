@@ -229,6 +229,7 @@ public class Main extends ApplicationAdapter {
     }
 
     private void input() {
+        updateCursor();
         if (currentState == GameState.TITLE) {
             if (Gdx.input.isKeyJustPressed(Input.Keys.ANY_KEY) || Gdx.input.justTouched()) {
                 startStage(0);
@@ -236,7 +237,8 @@ public class Main extends ApplicationAdapter {
             }
             return;
         }
-        if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) { // 테스트용: 바로 다음 스테이지 (마지막이면 1스테이지로)
+        // 테스트용: 바로 다음 스테이지 (마지막이면 1스테이지로). 맥은 F1이 밝기 키라 fn 없이 되는 N도 받는다
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F1) || Gdx.input.isKeyJustPressed(Input.Keys.N)) {
             startStage((world.stageIndex + 1) % Stage.COUNT);
             return;
         }
@@ -251,11 +253,38 @@ public class Main extends ApplicationAdapter {
                 world.deaths = 0;
                 playTime = 0;
                 startStage(0);
-            } else { // 플레이 중: 지금 스테이지를 처음부터
+            } else if (currentState == GameState.PLAYING || currentState == GameState.PAUSED) { // 지금 스테이지를 처음부터 (발사 연출 중엔 무시)
                 world.reset();
                 currentState = GameState.PLAYING;
                 snapCamera();
             }
+        }
+    }
+
+    /** 플레이 중 마우스 위치 (화면 좌표). 커서를 창 안에 가둔 동안은 움직인 양만 더해 직접 관리한다. */
+    private final com.badlogic.gdx.math.Vector2 cursor = new com.badlogic.gdx.math.Vector2();
+    private boolean cursorLocked;
+
+    /**
+     * 플레이 중엔 마우스를 창 안에 가둔다 (피드백: 마우스가 창 밖으로 나가 다른 창을 눌렀다).
+     * 커서를 붙잡으면(cursorCatched) 운영체제 커서는 사라지고 움직인 양만 들어오므로, 그 양을 더해 창 크기 안으로 자른다.
+     * 일시정지(ESC)·클리어 화면에선 풀어서 창 밖으로 나갈 수 있게 한다.
+     */
+    private void updateCursor() {
+        boolean lock = currentState == GameState.PLAYING && autoShotDir == null;
+        if (lock != cursorLocked) {
+            cursorLocked = lock;
+            if (lock) cursor.set(Gdx.input.getX(), Gdx.input.getY());
+            Gdx.input.setCursorCatched(lock);
+            if (lock) Gdx.graphics.setCursor(hiddenCursor);
+            else Gdx.graphics.setSystemCursor(Cursor.SystemCursor.Arrow);
+            return; // 붙잡는 순간 튀는 움직임 값은 버린다
+        }
+        if (lock) {
+            cursor.x = MathUtils.clamp(cursor.x + Gdx.input.getDeltaX(), 0, Gdx.graphics.getWidth() - 1);
+            cursor.y = MathUtils.clamp(cursor.y + Gdx.input.getDeltaY(), 0, Gdx.graphics.getHeight() - 1);
+        } else {
+            cursor.set(Gdx.input.getX(), Gdx.input.getY());
         }
     }
 
@@ -282,7 +311,7 @@ public class Main extends ApplicationAdapter {
         bannerTimer -= dt;
         if (currentState == GameState.PLAYING) {
             playTime += dt;
-            viewport.unproject(mouse.set(Gdx.input.getX(), Gdx.input.getY(), 0)); // 화면 좌표 → 월드 좌표
+            viewport.unproject(mouse.set(cursor.x, cursor.y, 0)); // 화면 좌표 → 월드 좌표
             if (autoAim != null) mouse.set(world.shoulderX() + autoAim.x, world.shoulderY() + autoAim.y, 0);
             world.update(dt, mouse.x, mouse.y);
             if (world.firedThisStep == Weapon.SHOTGUN) camManager.startShake(0.15f, 8f);

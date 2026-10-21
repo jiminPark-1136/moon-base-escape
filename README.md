@@ -47,7 +47,7 @@ git tag v0.5-playtest && git push origin v0.5-playtest
 | ESC | 일시정지 (조작표 표시) |
 | Enter | 지금 스테이지 재시작 / 클리어 화면에서 다음 스테이지 |
 | F12 | 스크린샷 (`screenshots/`) |
-| F1 | 다음 스테이지로 건너뛰기 (테스트용, 맥은 fn+F1) |
+| F1 또는 N | 다음 스테이지로 건너뛰기 (테스트용) |
 
 시작 화면에서 아무 키나 누르면 시작.
 
