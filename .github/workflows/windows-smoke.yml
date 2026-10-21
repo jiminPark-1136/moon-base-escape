@@ -4,6 +4,8 @@ name: windows-smoke
 
 on:
   workflow_dispatch:
+  push:
+    branches: ['fix/**']
 
 jobs:
   smoke:
