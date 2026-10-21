@@ -31,11 +31,4 @@ jobs:
             Start-Sleep 20
             if ($p.HasExited) { Write-Host "exited, code $($p.ExitCode)" } else { Write-Host "still running"; Stop-Process $p -Force }
             if (Test-Path "$HOME\MoonBaseEscape-error.txt") { Get-Content "$HOME\MoonBaseEscape-error.txt" -Encoding UTF8 | Select-Object -First 25 } else { Write-Host "(오류 로그 없음)" }
-            Write-Host "--- java -jar 직접 실행"
-            $java = Get-ChildItem $dir -Recurse -Filter java.exe | Select-Object -First 1
-            $jar = Get-ChildItem $dir -Recurse -Filter *.jar | Select-Object -First 1
-            $q = Start-Process $java.FullName -ArgumentList "-jar", "`"$($jar.FullName)`"" -WorkingDirectory $jar.DirectoryName -PassThru -RedirectStandardError "$dir.err.txt" -RedirectStandardOutput "$dir.out.txt"
-            Start-Sleep 20
-            if ($q.HasExited) { Write-Host "exited, code $($q.ExitCode)" } else { Write-Host "still running"; Stop-Process $q -Force }
-            Get-Content "$dir.out.txt", "$dir.err.txt" | Select-Object -First 25
           }

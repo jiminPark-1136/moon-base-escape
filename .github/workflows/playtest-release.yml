@@ -13,7 +13,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: macos-latest   # 맥 앱 서명(codesign)이 맥에서만 된다
     steps:
       - uses: actions/checkout@v4
 
@@ -36,14 +36,26 @@ jobs:
       - name: 빌드 (jar + 자바 포함 실행 파일 윈도우·맥·리눅스)
         run: ./gradlew lwjgl3:jar lwjgl3:packageWinX64 lwjgl3:packageMacM1 lwjgl3:packageMacX64 lwjgl3:packageLinuxX64
 
-      # construo zip은 실행 권한을 비표준으로 적어서 맥 기본 압축 해제(Safari·Finder)가 권한을 버린다
-      # → 앱이 "열 수 없습니다"로 실패. 표준 zip으로 다시 묶어 실행 권한을 살린다.
-      - name: zip 다시 묶기 (실행 권한 보존)
+      # construo zip은 실행 권한을 비표준으로 적어서 맥 기본 압축 해제(Safari·Finder)가 권한을 버린다 → "열 수 없습니다".
+      # 또 앱 전체가 서명되지 않아 인터넷에서 받은 M칩용은 "손상되었기 때문에 열 수 없습니다"가 뜬다.
+      # → 풀어서 맥 앱은 임시(ad-hoc) 서명하고, 맥은 ditto·나머지는 zip으로 다시 묶는다.
+      - name: zip 다시 묶기 (실행 권한 보존, 맥 앱 서명)
         run: |
           cd lwjgl3/build/construo/dist
           for z in *.zip; do
             rm -rf tmp && mkdir tmp && unzip -q "$z" -d tmp && rm "$z"
-            (cd tmp && zip -qry "../$z" .) && rm -rf tmp
+            app=$(find tmp -maxdepth 2 -name '*.app' | head -1)
+            if [ -n "$app" ]; then
+              # construo는 자바 런타임·jar를 Contents/MacOS(코드 전용)에 넣어 서명이 안 된다 → Resources로 옮기고 링크
+              mkdir -p "$app/Contents/Resources"
+              (cd "$app/Contents/MacOS" && for x in runtime app *.jar; do mv "$x" ../Resources/ && ln -s "../Resources/$x" "$x"; done)
+              codesign --force -s - "$app"
+              codesign --verify --deep --strict "$app"
+              ditto -c -k --keepParent "$(dirname "$app")" "$z"
+            else
+              (cd tmp && zip -qry "../$z" .)
+            fi
+            rm -rf tmp
           done
 
       - name: 결과물 목록
