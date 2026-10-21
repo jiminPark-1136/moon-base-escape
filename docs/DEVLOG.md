@@ -340,6 +340,16 @@ git worktree remove ../v0.1
   - 피드백: Issues의 "플레이테스트 피드백" 양식 (`.github/ISSUE_TEMPLATE/playtest.md`)
 - jar 이름 `MidtermGame` → `MoonBaseEscape`, 창 제목 "Moon Base Escape - 달 기지 탈출"
 
+### 10/21 (수) — 플레이테스트 1차 피드백: 실행이 안 됨 (`fix/playtest-launch`)
+- **윈도우: 창이 안 뜨고 아무 메시지도 없음**
+  - 실행기에 오류를 홈 폴더 `MoonBaseEscape-error.txt`로 남기게 하고, GitHub 윈도우 서버에서 영문·한글 경로로 띄워 보는 워크플로(`windows-smoke.yml`)를 만들어 재현
+  - 원인: 자바를 띄우는 실행기(roast)가 한글 경로를 시스템 문자 인코딩으로 못 바꿔 자바가 뜨기 전에 종료 (`OptStringNotRepresentable`). construo 2.2.2(roast v1.6.0)로 올려도 같음
+  - 대응: 안내문에 "영어로만 된 폴더(예: `C:\Games`)에 풀기" 추가
+- **맥 M칩: "손상되었기 때문에 열 수 없습니다"**
+  - 원인: 앱 전체가 서명되지 않음 + construo가 자바 런타임을 코드 전용 폴더(`Contents/MacOS`)에 넣어 그대로는 서명 불가
+  - 대응: 배포 때 런타임·jar를 `Contents/Resources`로 옮기고 링크 → 임시(ad-hoc) 서명. 이제 "확인되지 않은 개발자"로 바뀌어 우클릭 → 열기로 실행 가능
+- 앞서(10/20) 맥 기본 압축 해제가 실행 권한을 버려 "열 수 없습니다"가 뜨던 문제는 zip 다시 묶기로 해결
+
 ---
 
 ## 7. 남은 일 / 알려진 문제
