@@ -1,0 +1,105 @@
+# 배포판 실행 점검: 친구가 받는 Release 파일 그대로 윈도우·맥·리눅스에서 받아 → 기본 방식으로 풀고 → 실행해
+# 20초 뒤에도 살아 있는지, 오류 로그가 없는지 보고 화면을 찍어 남긴다 (Actions 실행 결과의 Artifacts).
+# 서버엔 그래픽 카드가 없어 소프트웨어 OpenGL(Mesa)을 깐다.
+name: release-smoke
+
+on:
+  workflow_run:
+    workflows: [playtest-release]
+    types: [completed]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 점검할 릴리스 태그 (비우면 최신)
+        required: false
+  push:
+    branches: ['fix/**']
+
+jobs:
+  smoke:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, asset: linuxX64 }
+          - { os: windows-latest, asset: winX64 }
+          - { os: macos-latest, asset: macM1 }
+          - { os: macos-15-intel, asset: macX64 }
+    runs-on: ${{ matrix.os }}
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: ${{ github.event.inputs.tag }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: 릴리스 파일 받기
+        run: |
+          [ -n "$TAG" ] || TAG=$(gh release list -R "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName')
+          echo "tag: $TAG"
+          gh release download "$TAG" -R "$GITHUB_REPOSITORY" -p "*${{ matrix.asset }}.zip" -D dl
+          ls -l dl
+
+      - name: 풀기·실행 (리눅스)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb libgl1-mesa-dri x11-apps imagemagick >/dev/null
+          mkdir game && unzip -q dl/*.zip -d game
+          exe=$(find game -maxdepth 2 -type f -name MoonBaseEscape)
+          ls -l "$exe"
+          Xvfb :99 -screen 0 1280x720x24 & sleep 2
+          export DISPLAY=:99 LIBGL_ALWAYS_SOFTWARE=1
+          (cd "$(dirname "$exe")" && ./MoonBaseEscape > ../../run.log 2>&1 &) ; sleep 20
+          import -window root shot.png || true
+          pgrep -f MoonBaseEscape >/dev/null && echo "ALIVE" > result.txt || echo "DIED" > result.txt
+
+      - name: 풀기·실행 (윈도우)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          Expand-Archive (Get-ChildItem dl/*.zip)[0].FullName -DestinationPath C:\game
+          $exe = Get-ChildItem C:\game -Recurse -Filter MoonBaseEscape.exe | Select-Object -First 1
+          # 소프트웨어 OpenGL: mesa-dist-win의 opengl32.dll을 exe 옆에 둔다
+          $m = (Invoke-RestMethod https://api.github.com/repos/pal1000/mesa-dist-win/releases/latest).assets | Where-Object name -like '*release-msvc.7z' | Select-Object -First 1
+          Invoke-WebRequest $m.browser_download_url -OutFile mesa.7z
+          7z x mesa.7z -omesa -y | Out-Null
+          Copy-Item mesa\x64\*.dll $exe.DirectoryName
+          $env:GALLIUM_DRIVER = "llvmpipe"
+          $p = Start-Process $exe.FullName -WorkingDirectory $exe.DirectoryName -PassThru -RedirectStandardError run.log -RedirectStandardOutput out.log
+          Start-Sleep 20
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$PWD\shot.png")
+          if ($p.HasExited) { "DIED (code $($p.ExitCode))" | Out-File result.txt } else { "ALIVE" | Out-File result.txt }
+          Get-Content out.log -ErrorAction SilentlyContinue | Add-Content run.log
+
+      - name: 풀기·실행 (맥)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir game && ditto -x -k dl/*.zip game      # Finder·Safari와 같은 압축 해제
+          app=$(find game -maxdepth 2 -name '*.app')
+          codesign --verify --deep --strict "$app" && echo "서명 OK"
+          open "$app"; sleep 20
+          screencapture -x shot.png || true
+          pgrep -f "MacOS/MoonBaseEscape" >/dev/null && echo "ALIVE" > result.txt || echo "DIED" > result.txt
+          log show --last 1m --predicate 'process == "MoonBaseEscape"' 2>/dev/null | tail -20 > run.log || true
+
+      - name: 결과
+        if: always()
+        run: |
+          echo "== ${{ matrix.asset }}: $(cat result.txt 2>/dev/null)"
+          echo "--- 실행 출력"; tail -40 run.log 2>/dev/null || true
+          echo "--- 오류 로그"; cat ~/MoonBaseEscape-error.txt 2>/dev/null || echo "(없음)"
+          grep -q ALIVE result.txt
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: smoke-${{ matrix.asset }}
+          path: |
+            shot.png
+            run.log
+            result.txt
