@@ -27,8 +27,9 @@ jobs:
             Expand-Archive $zip.FullName -DestinationPath $dir -Force
             $exe = Get-ChildItem $dir -Recurse -Filter MoonBaseEscape.exe | Select-Object -First 1
             Remove-Item "$HOME\MoonBaseEscape-error.txt" -ErrorAction SilentlyContinue
-            $p = Start-Process $exe.FullName -WorkingDirectory $exe.DirectoryName -PassThru
+            $env:RUST_BACKTRACE = "1"; $p = Start-Process $exe.FullName -WorkingDirectory $exe.DirectoryName -PassThru -RedirectStandardError "C:\t\err.txt" -RedirectStandardOutput "C:\t\out.txt"
             Start-Sleep 20
             if ($p.HasExited) { Write-Host "exited, code $($p.ExitCode)" } else { Write-Host "still running"; Stop-Process $p -Force }
+            Get-Content "C:\t\out.txt", "C:\t\err.txt" -Encoding UTF8 | Select-Object -First 20
             if (Test-Path "$HOME\MoonBaseEscape-error.txt") { Get-Content "$HOME\MoonBaseEscape-error.txt" -Encoding UTF8 | Select-Object -First 25 } else { Write-Host "(오류 로그 없음)" }
           }
