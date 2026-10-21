@@ -82,10 +82,9 @@ jobs:
           mkdir game && ditto -x -k dl/*.zip game      # Finder·Safari와 같은 압축 해제
           app=$(find game -maxdepth 2 -name '*.app')
           codesign --verify --deep --strict "$app" && echo "서명 OK"
-          open "$app"; sleep 20
+          "$app/Contents/MacOS/MoonBaseEscape" > run.log 2>&1 & sleep 20
           screencapture -x shot.png || true
           pgrep -f "MacOS/MoonBaseEscape" >/dev/null && echo "ALIVE" > result.txt || echo "DIED" > result.txt
-          log show --last 1m --predicate 'process == "MoonBaseEscape"' 2>/dev/null | tail -20 > run.log || true
 
       - name: 결과
         if: always()
