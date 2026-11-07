@@ -6,6 +6,7 @@
 
 ![](docs/images/history/v0.4-marine-crawler.png)
 
+- 시연 영상: [YouTube](https://youtu.be/CDhX5YkIjb0)
 - 플레이테스트 버전 받기: [Releases](https://github.com/jiminPark-1136/moon-base-escape/releases) (윈도우·맥·리눅스)
 - 기획·일정: [PLAN.md](PLAN.md)
 - 개발 일지: [docs/DEVLOG.md](docs/DEVLOG.md)
