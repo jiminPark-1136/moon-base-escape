@@ -11,7 +11,7 @@ public class RecoilHeightCheck {
     public static void main(String[] args) {
         float[][] cases = { // {반동 속도, 중력 배율, 기대 높이}
             {500, 1f, 74}, {500, 0.58f, 127}, {500, 0.16f, 460},
-            {80, 1f, 2}, {80, 0.16f, 12},
+            {80, 1f, 2}, {80, 0.58f, 3}, {80, 0.16f, 12},
         };
         Array<Rectangle> floor = new Array<>();
         floor.add(new Rectangle(0, -10, 100, 10));
